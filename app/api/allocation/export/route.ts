@@ -1,0 +1,228 @@
+import { NextResponse } from "next/server";
+import {
+  queryAllocationRecords,
+} from "../data-source";
+import type { Channel, DateMode } from "../data-source";
+
+interface ExportRequest {
+  uid?: string;
+  channel: Channel;
+  dateMode: DateMode;
+  date?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+interface CsvRow {
+  channel: string;
+  dt: string;
+  uid: string;
+  phone: string;
+  leadType: string;
+  userTypeOrChannel: string;
+  grade: string;
+  rank: string;
+  extraInfo: string;
+}
+
+function escapeCsvValue(value: string): string {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildCsv(rows: CsvRow[]): string {
+  const headers = [
+    "渠道",
+    "分配日期",
+    "用户UID",
+    "手机号",
+    "线索类型",
+    "用户类型/线索渠道",
+    "年级",
+    "排名",
+    "扩展信息",
+  ];
+
+  const lines = [
+    headers.join(","),
+    ...rows.map((row) =>
+      [
+        escapeCsvValue(row.channel),
+        escapeCsvValue(row.dt),
+        escapeCsvValue(row.uid),
+        escapeCsvValue(row.phone),
+        escapeCsvValue(row.leadType),
+        escapeCsvValue(row.userTypeOrChannel),
+        escapeCsvValue(row.grade),
+        escapeCsvValue(row.rank),
+        escapeCsvValue(row.extraInfo),
+      ].join(",")
+    ),
+  ];
+
+  return "\ufeff" + lines.join("\n");
+}
+
+export async function POST(request: Request) {
+  try {
+    const body: ExportRequest = await request.json();
+    const { uid, channel, dateMode, date, startDate, endDate } = body;
+
+    // Validation
+    if (uid && !/^\d+$/.test(uid.trim())) {
+      return NextResponse.json(
+        { error: "uid 格式不正确，请输入纯数字" },
+        { status: 400 }
+      );
+    }
+
+    if (!["all", "bpo", "tmk"].includes(channel)) {
+      return NextResponse.json(
+        { error: "channel 只能是 all / bpo / tmk" },
+        { status: 400 }
+      );
+    }
+
+    if (!["specific", "range", "all_time"].includes(dateMode)) {
+      return NextResponse.json(
+        { error: "dateMode 只能是 specific / range / all_time" },
+        { status: 400 }
+      );
+    }
+
+    if (dateMode === "specific" && !date) {
+      return NextResponse.json(
+        { error: "指定日期模式下 date 不能为空" },
+        { status: 400 }
+      );
+    }
+
+    if (dateMode === "specific" && date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json(
+        { error: "date 格式必须为 YYYY-MM-DD" },
+        { status: 400 }
+      );
+    }
+
+    if (dateMode === "range") {
+      if (!startDate || !endDate) {
+        return NextResponse.json(
+          { error: "时间段导出时 startDate 和 endDate 不能为空" },
+          { status: 400 }
+        );
+      }
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        return NextResponse.json(
+          { error: "startDate 和 endDate 格式必须为 YYYY-MM-DD" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (dateMode === "all_time") {
+      return NextResponse.json(
+        { error: "导出必须选择某一天或最长 14 天时间段" },
+        { status: 400 }
+      );
+    }
+
+    const rangeStart = dateMode === "specific" ? date : startDate;
+    const rangeEnd = dateMode === "specific" ? date : endDate;
+    if (!rangeStart || !rangeEnd) {
+      return NextResponse.json(
+        { error: "导出日期不能为空" },
+        { status: 400 }
+      );
+    }
+
+    const start = new Date(rangeStart);
+    const end = new Date(rangeEnd);
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const dayCount = Math.floor((end.getTime() - start.getTime()) / oneDayMs) + 1;
+
+    if (start > end) {
+      return NextResponse.json(
+        { error: "开始日期不能晚于结束日期" },
+        { status: 400 }
+      );
+    }
+
+    if (dayCount > 14) {
+      return NextResponse.json(
+        { error: "导出时间范围最多支持 14 天" },
+        { status: 400 }
+      );
+    }
+
+    const trimmedUid = uid?.trim() || "";
+    const csvRows: CsvRow[] = [];
+    const { bpoRecords, tmkRecords } = await queryAllocationRecords({
+      uid: trimmedUid || undefined,
+      channel,
+      dateMode,
+      date,
+      startDate,
+      endDate,
+    });
+
+    // Filter and collect BPO records
+    if (channel !== "tmk") {
+      bpoRecords.forEach((r) => {
+        csvRows.push({
+          channel: "BPO",
+          dt: r.dt,
+          uid: r.userid,
+          phone: r.phone,
+          leadType: r.leadType,
+          userTypeOrChannel: r.userType,
+          grade: r.grade,
+          rank: String(r.rank),
+          extraInfo: r.extraInfo,
+        });
+      });
+    }
+
+    // Filter and collect TMK records
+    if (channel !== "bpo") {
+      tmkRecords.forEach((r) => {
+        csvRows.push({
+          channel: "TMK",
+          dt: r.dt,
+          uid: r.user_id,
+          phone: "",
+          leadType: r.hunt_lead_type,
+          userTypeOrChannel: r.lead_channel,
+          grade: r.grade,
+          rank: r.queue_rnk,
+          extraInfo: "",
+        });
+      });
+    }
+
+    if (csvRows.length === 0) {
+      return NextResponse.json(
+        { error: "当前条件下暂无可导出的明细" },
+        { status: 404 }
+      );
+    }
+
+    const csv = buildCsv(csvRows);
+    const channelLabel = channel === "all" ? "all" : channel;
+    const uidLabel = trimmedUid || "all";
+    const dateLabel = rangeStart === rangeEnd ? rangeStart : `${rangeStart}_${rangeEnd}`;
+    const filename = `分配明细_${channelLabel}_${uidLabel}_${dateLabel}.csv`;
+
+    return new Response(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      },
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "请求参数解析失败" },
+      { status: 400 }
+    );
+  }
+}

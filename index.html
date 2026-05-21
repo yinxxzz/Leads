@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>用户分配记录查询工作台</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #2563eb;
+      --primary-soft: #eff6ff;
+      --success: #16a34a;
+      --warning: #f59e0b;
+      --danger: #dc2626;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 48px;
+    }
+
+    .header {
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.3;
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+    }
+
+    .search-card {
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr auto auto auto;
+      gap: 14px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    button {
+      height: 40px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    input,
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text);
+      padding: 0 12px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    button {
+      border: 0;
+      padding: 0 18px;
+      cursor: pointer;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    .hint {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .error {
+      margin-top: 12px;
+      color: var(--danger);
+      font-size: 13px;
+      display: none;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .summary-item {
+      padding: 18px;
+    }
+
+    .summary-label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .summary-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .tag-success {
+      color: var(--success);
+      background: #ecfdf5;
+    }
+
+    .tag-muted {
+      color: var(--muted);
+      background: #f3f4f6;
+    }
+
+    .result-card {
+      overflow: hidden;
+      display: none;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      padding: 16px 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab-btn {
+      height: 38px;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 10px 10px 0 0;
+    }
+
+    .tab-btn.active {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    .table-wrap {
+      padding: 16px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 10px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      color: #374151;
+      background: #f9fafb;
+      font-weight: 700;
+    }
+
+    td {
+      color: #111827;
+    }
+
+    .empty {
+      padding: 42px 16px;
+      color: var(--muted);
+      text-align: center;
+      display: none;
+    }
+
+    .loading {
+      display: none;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 14px;
+    }
+
+    @media (max-width: 960px) {
+      .form-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        padding: 24px 14px 36px;
+      }
+
+      .form-grid,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="header">
+      <h1>用户分配记录查询工作台</h1>
+      <p>输入用户 UID，查询该用户在 BPO / TMK 渠道下是否进入分配池，以及对应分配日期、渠道、排名等信息。</p>
+    </section>
+
+    <section class="card search-card">
+      <div class="form-grid">
+        <div class="field">
+          <label for="uidInput">用户 UID</label>
+          <input id="uidInput" placeholder="请输入单个 UID，例如 123456789" />
+        </div>
+
+        <div class="field">
+          <label for="channelSelect">查询渠道</label>
+          <select id="channelSelect">
+            <option value="all">全部</option>
+            <option value="bpo">BPO</option>
+            <option value="tmk">TMK</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="dateModeSelect">时间范围</label>
+          <select id="dateModeSelect">
+            <option value="specific">指定日期</option>
+            <option value="all_time">不限制时间</option>
+          </select>
+        </div>
+
+        <div class="field" id="dateField">
+          <label for="dateInput">查询日期</label>
+          <input id="dateInput" type="date" />
+        </div>
+
+        <button class="btn-primary" id="queryBtn">查询</button>
+        <button class="btn-secondary" id="exportBtn">导出明细</button>
+        <button class="btn-secondary" id="resetBtn">重置</button>
+      </div>
+
+      <div class="hint">导出说明：填 UID 时导出当前 UID 明细；不填 UID 且选择指定日期时，导出该日期下的全部明细。</div>
+      <div class="error" id="errorText"></div>
+      <div class="loading" id="loadingText">查询中，请稍候...</div>
+    </section>
+
+    <section class="summary-grid" id="summaryGrid">
+      <div class="card summary-item">
+        <div class="summary-label">查询 UID</div>
+        <div class="summary-value" id="summaryUid">-</div>
+      </div>
+      <div class="card summary-item">
+        <div class="summary-label">是否有分配记录</div>
+        <div class="summary-value"><span class="tag" id="summaryStatus">-</span></div>
+      </div>
+      <div class="card summary-item">
+        <div class="summary-label">BPO 记录数</div>
+        <div class="summary-value" id="summaryBpo">0</div>
+      </div>
+      <div class="card summary-item">
+        <div class="summary-label">TMK 记录数</div>
+        <div class="summary-value" id="summaryTmk">0</div>
+      </div>
+      <div class="card summary-item">
+        <div class="summary-label">最近分配日期</div>
+        <div class="summary-value" id="summaryLatest">-</div>
+      </div>
+    </section>
+
+    <section class="card result-card" id="resultCard">
+      <div class="tabs" id="tabs"></div>
+      <div class="table-wrap">
+        <table id="resultTable"></table>
+        <div class="empty" id="emptyText"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const mockBpoRecords = [
+      {
+        dt: "2026-05-18",
+        userid: "123456789",
+        phone: "138****5678",
+        leadType: "externalLead",
+        userType: "pediaStock",
+        grade: "unset",
+        rank: 28,
+        extraInfo: "unset"
+      },
+      {
+        dt: "2026-05-17",
+        userid: "123456789",
+        phone: "138****5678",
+        leadType: "externalLead",
+        userType: "百科存量",
+        grade: "unset",
+        rank: 42,
+        extraInfo: "unset"
+      },
+      {
+        dt: "2026-05-18",
+        userid: "987654321",
+        phone: "139****1111",
+        leadType: "externalLead",
+        userType: "pediaStock",
+        grade: "unset",
+        rank: 73,
+        extraInfo: "unset"
+      }
+    ];
+
+    const mockTmkRecords = [
+      {
+        dt: "2026-05-18",
+        user_id: "123456789",
+        lead_channel: "tmk_hunt",
+        hunt_lead_type: "stock_user",
+        grade: "S2",
+        queue_rnk: "15"
+      },
+      {
+        dt: "2026-05-16",
+        user_id: "123456789",
+        lead_channel: "tmk_hunt",
+        hunt_lead_type: "external_lead",
+        grade: "S1",
+        queue_rnk: "31"
+      },
+      {
+        dt: "2026-05-18",
+        user_id: "987654321",
+        lead_channel: "tmk_hunt",
+        hunt_lead_type: "stock_user",
+        grade: "S3",
+        queue_rnk: "64"
+      }
+    ];
+
+    const columns = {
+      bpo: [
+        ["dt", "分配日期"],
+        ["userid", "用户 UID"],
+        ["phone", "手机号"],
+        ["leadType", "线索类型"],
+        ["userType", "用户类型"],
+        ["grade", "年级"],
+        ["rank", "排名"],
+        ["extraInfo", "扩展信息"]
+      ],
+      tmk: [
+        ["dt", "分配日期"],
+        ["user_id", "用户 UID"],
+        ["lead_channel", "线索渠道"],
+        ["hunt_lead_type", "线索类型"],
+        ["grade", "年级"],
+        ["queue_rnk", "队列排名"]
+      ]
+    };
+
+    const uidInput = document.getElementById("uidInput");
+    const channelSelect = document.getElementById("channelSelect");
+    const dateModeSelect = document.getElementById("dateModeSelect");
+    const dateInput = document.getElementById("dateInput");
+    const dateField = document.getElementById("dateField");
+    const queryBtn = document.getElementById("queryBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const errorText = document.getElementById("errorText");
+    const loadingText = document.getElementById("loadingText");
+    const summaryGrid = document.getElementById("summaryGrid");
+    const resultCard = document.getElementById("resultCard");
+    const tabs = document.getElementById("tabs");
+    const resultTable = document.getElementById("resultTable");
+    const emptyText = document.getElementById("emptyText");
+
+    let currentResult = {
+      bpoRecords: [],
+      tmkRecords: []
+    };
+    let activeTab = "bpo";
+
+    function formatLocalDate(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+
+      return `${year}-${month}-${day}`;
+    }
+
+    function getToday() {
+      return formatLocalDate(new Date());
+    }
+
+    function getYesterday() {
+      const date = new Date();
+      date.setDate(date.getDate() - 1);
+      return formatLocalDate(date);
+    }
+
+    function showError(message) {
+      errorText.textContent = message;
+      errorText.style.display = "block";
+    }
+
+    function clearError() {
+      errorText.textContent = "";
+      errorText.style.display = "none";
+    }
+
+    function validateForm() {
+      const uid = uidInput.value.trim();
+      const dateMode = dateModeSelect.value;
+
+      if (!uid) {
+        showError("请输入用户 UID");
+        return false;
+      }
+
+      if (!/^\d+$/.test(uid)) {
+        showError("UID 格式不正确，请输入纯数字");
+        return false;
+      }
+
+      if (dateMode === "specific" && !dateInput.value) {
+        showError("请选择查询日期");
+        return false;
+      }
+
+      if (dateMode === "specific" && dateInput.value > getToday()) {
+        showError("查询日期不能晚于今天");
+        return false;
+      }
+
+      clearError();
+      return true;
+    }
+
+    function filterByDate(records, dateMode, date, dateKey = "dt") {
+      if (dateMode === "all_time") {
+        return records;
+      }
+
+      return records.filter((record) => record[dateKey] === date);
+    }
+
+    function filterByUid(records, uid, uidKey) {
+      if (!uid) {
+        return records;
+      }
+
+      return records.filter((record) => String(record[uidKey]) === uid);
+    }
+
+    function queryMockData() {
+      const uid = uidInput.value.trim();
+      const channel = channelSelect.value;
+      const dateMode = dateModeSelect.value;
+      const date = dateInput.value;
+
+      const bpoRecords = channel !== "tmk"
+        ? filterByUid(filterByDate(mockBpoRecords, dateMode, date), uid, "userid")
+        : [];
+      const tmkRecords = channel !== "bpo"
+        ? filterByUid(filterByDate(mockTmkRecords, dateMode, date), uid, "user_id")
+        : [];
+
+      return {
+        uid,
+        bpoRecords,
+        tmkRecords
+      };
+    }
+
+    function getLatestDate(records) {
+      const dates = records.map((record) => record.dt).filter(Boolean).sort().reverse();
+      return dates[0] || "-";
+    }
+
+    function renderSummary(result) {
+      const bpoCount = result.bpoRecords.length;
+      const tmkCount = result.tmkRecords.length;
+      const total = bpoCount + tmkCount;
+      const latestDate = getLatestDate([...result.bpoRecords, ...result.tmkRecords]);
+      const status = document.getElementById("summaryStatus");
+
+      document.getElementById("summaryUid").textContent = result.uid;
+      document.getElementById("summaryBpo").textContent = `${bpoCount} 条`;
+      document.getElementById("summaryTmk").textContent = `${tmkCount} 条`;
+      document.getElementById("summaryLatest").textContent = latestDate;
+
+      status.textContent = total > 0 ? "有" : "无";
+      status.className = `tag ${total > 0 ? "tag-success" : "tag-muted"}`;
+
+      summaryGrid.style.display = "grid";
+    }
+
+    function getVisibleTabs() {
+      const channel = channelSelect.value;
+      if (channel === "bpo") return ["bpo"];
+      if (channel === "tmk") return ["tmk"];
+      return ["bpo", "tmk"];
+    }
+
+    function renderTabs() {
+      const visibleTabs = getVisibleTabs();
+      if (!visibleTabs.includes(activeTab)) {
+        activeTab = visibleTabs[0];
+      }
+
+      tabs.innerHTML = visibleTabs
+        .map((tab) => {
+          const label = tab === "bpo" ? "BPO 分配记录" : "TMK 分配记录";
+          const count = tab === "bpo" ? currentResult.bpoRecords.length : currentResult.tmkRecords.length;
+          return `<button class="tab-btn ${activeTab === tab ? "active" : ""}" data-tab="${tab}">${label}（${count}）</button>`;
+        })
+        .join("");
+
+      document.querySelectorAll(".tab-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeTab = button.dataset.tab;
+          renderTabs();
+          renderTable();
+        });
+      });
+    }
+
+    function renderTable() {
+      const records = activeTab === "bpo" ? currentResult.bpoRecords : currentResult.tmkRecords;
+      const currentColumns = columns[activeTab];
+
+      if (records.length === 0) {
+        resultTable.innerHTML = "";
+        emptyText.textContent = activeTab === "bpo" ? "该用户暂无 BPO 分配记录" : "该用户暂无 TMK 分配记录";
+        emptyText.style.display = "block";
+        return;
+      }
+
+      emptyText.style.display = "none";
+      resultTable.innerHTML = `
+        <thead>
+          <tr>
+            ${currentColumns.map(([, label]) => `<th>${label}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>
+          ${records.map((record) => `
+            <tr>
+              ${currentColumns.map(([key]) => `<td>${record[key] ?? "-"}</td>`).join("")}
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+    }
+
+    function renderResult(result) {
+      currentResult = result;
+      renderSummary(result);
+      renderTabs();
+      renderTable();
+      resultCard.style.display = "block";
+    }
+
+    function validateExport() {
+      const uid = uidInput.value.trim();
+      const dateMode = dateModeSelect.value;
+
+      if (uid && !/^\d+$/.test(uid)) {
+        showError("UID 格式不正确，请输入纯数字");
+        return false;
+      }
+
+      if (dateMode === "specific" && !dateInput.value) {
+        showError("请选择导出日期");
+        return false;
+      }
+
+      if (dateMode === "specific" && dateInput.value > getToday()) {
+        showError("导出日期不能晚于今天");
+        return false;
+      }
+
+      if (!uid && dateMode === "all_time") {
+        showError("为避免导出数据过大，不填 UID 时请先选择指定日期");
+        return false;
+      }
+
+      clearError();
+      return true;
+    }
+
+    function getExportRows() {
+      const channel = channelSelect.value;
+      const dateMode = dateModeSelect.value;
+      const date = dateInput.value;
+      const uid = uidInput.value.trim();
+      const rows = [];
+
+      if (channel !== "tmk") {
+        filterByUid(filterByDate(mockBpoRecords, dateMode, date), uid, "userid").forEach((record) => {
+          rows.push({
+            "渠道": "BPO",
+            "分配日期": record.dt,
+            "用户UID": record.userid,
+            "手机号": record.phone,
+            "线索类型": record.leadType,
+            "用户类型/线索渠道": record.userType,
+            "年级": record.grade,
+            "排名": record.rank,
+            "扩展信息": record.extraInfo
+          });
+        });
+      }
+
+      if (channel !== "bpo") {
+        filterByUid(filterByDate(mockTmkRecords, dateMode, date), uid, "user_id").forEach((record) => {
+          rows.push({
+            "渠道": "TMK",
+            "分配日期": record.dt,
+            "用户UID": record.user_id,
+            "手机号": "",
+            "线索类型": record.hunt_lead_type,
+            "用户类型/线索渠道": record.lead_channel,
+            "年级": record.grade,
+            "排名": record.queue_rnk,
+            "扩展信息": ""
+          });
+        });
+      }
+
+      return rows;
+    }
+
+    function escapeCsvValue(value) {
+      const text = String(value ?? "");
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    function downloadCsv(rows) {
+      const headers = ["渠道", "分配日期", "用户UID", "手机号", "线索类型", "用户类型/线索渠道", "年级", "排名", "扩展信息"];
+      const csv = [
+        headers.join(","),
+        ...rows.map((row) => headers.map((header) => escapeCsvValue(row[header])).join(","))
+      ].join("\n");
+      const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const uid = uidInput.value.trim() || "all";
+      const datePart = dateModeSelect.value === "specific" ? dateInput.value : "all-time";
+
+      link.href = url;
+      link.download = `分配明细_${channelSelect.value}_${uid}_${datePart}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function exportDetails() {
+      if (!validateExport()) return;
+
+      const rows = getExportRows();
+      if (rows.length === 0) {
+        showError("当前条件下暂无可导出的明细");
+        return;
+      }
+
+      downloadCsv(rows);
+      clearError();
+    }
+
+    function resetPage() {
+      uidInput.value = "";
+      channelSelect.value = "all";
+      dateModeSelect.value = "specific";
+      dateInput.max = getToday();
+      dateInput.value = getYesterday();
+      dateField.style.display = "block";
+      clearError();
+      summaryGrid.style.display = "none";
+      resultCard.style.display = "none";
+      loadingText.style.display = "none";
+      queryBtn.textContent = "查询";
+      queryBtn.disabled = false;
+    }
+
+    dateModeSelect.addEventListener("change", () => {
+      dateField.style.display = dateModeSelect.value === "specific" ? "block" : "none";
+    });
+
+    queryBtn.addEventListener("click", () => {
+      if (!validateForm()) return;
+
+      queryBtn.textContent = "查询中...";
+      queryBtn.disabled = true;
+      loadingText.style.display = "block";
+
+      window.setTimeout(() => {
+        const result = queryMockData();
+        renderResult(result);
+        loadingText.style.display = "none";
+        queryBtn.textContent = "查询";
+        queryBtn.disabled = false;
+      }, 500);
+    });
+
+    resetBtn.addEventListener("click", resetPage);
+    exportBtn.addEventListener("click", exportDetails);
+
+    resetPage();
+  </script>
+</body>
+</html>

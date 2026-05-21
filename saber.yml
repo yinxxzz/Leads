@@ -1,0 +1,44 @@
+version: 2.0
+project_type: node
+
+stages:
+  - build
+  - build-deploy
+
+# 环境变量
+variables:
+  DIST_PATH: .next/
+
+# build
+build:
+  stage: build
+  # 使用公司提供的 Node.js 镜像（Next.js 16 需要 Node.js 18+）
+  image: docker-registry.zhenguanyu.com/yuanfd/yfd_nodejs_ct8:22.19.0
+
+  # 构建前准备
+  before_script:
+    - echo "开始构建测试环境..."
+    - node --version
+    - corepack enable
+    - corepack prepare pnpm@10.17.1 --activate
+    - rm -rf node_modules
+    - pnpm config set store-dir .pnpm-store
+
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm build
+
+# build-deploy
+build-deploy:
+  stage: build-deploy
+  # 使用公司提供的 Node.js 镜像（Next.js 16 需要 Node.js 18+）
+  image: docker-registry.zhenguanyu.com/yuanfd/yfd_nodejs_ct8:22.19.0
+
+  artifacts:
+    name: build-deploy
+    docker: true
+    path:
+      - ".next/**"
+    tags:
+      - default
+      - online

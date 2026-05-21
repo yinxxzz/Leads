@@ -1,0 +1,40 @@
+{
+  "last_migration": "20250115000001_initial_schema.sql",
+  "last_sync_commit": "initial",
+  "last_sync_date": "2025-01-15T00:00:00Z",
+  "migrations_count": 1,
+  "full_schema_hash": "sha256:initial",
+  "description": "初始数据库架构同步记录",
+  "tables": {
+    "projects": {
+      "created": "20250115000001",
+      "fields": 14,
+      "indexes": 4,
+      "triggers": 1
+    },
+    "conversations": {
+      "created": "20250115000001",
+      "fields": 7,
+      "indexes": 2,
+      "triggers": 1
+    },
+    "messages": {
+      "created": "20250115000001",
+      "fields": 9,
+      "indexes": 3,
+      "triggers": 0
+    }
+  },
+  "functions": {
+    "exec_sql": {
+      "created": "20250115000001",
+      "type": "RPC",
+      "description": "执行原始 SQL（RPC 调用）"
+    },
+    "update_updated_at_column": {
+      "created": "20250115000001",
+      "type": "trigger",
+      "description": "自动更新 updated_at 列"
+    }
+  }
+}

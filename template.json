@@ -1,0 +1,56 @@
+{
+  "id": "nextjs-fullstack",
+  "name": "Next.js 全栈应用 (测试 - 无数据库变量)",
+  "description": "测试模板：用于验证 create-user-database 工作流，不注入数据库变量",
+  "type": "fullstack",
+  "version": "2.0.0",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.78.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "next": "^16.1.1",
+    "pg": "^8.16.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^3.4.0",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.33",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.20.6",
+    "typescript": "^5.5.3"
+  },
+  "features": [
+    "Next.js 16",
+    "React 19",
+    "TypeScript 5",
+    "Tailwind CSS v4",
+    "lucide-react 图标库",
+    "shadcn/ui 工具库",
+    "App Router",
+    "API Routes",
+    "SSR/SSG 支持",
+    "前后端一体化",
+    "ESLint 配置",
+    "Supabase SDK"
+  ],
+  "port": 8000,
+  "keywords": [
+    "nextjs",
+    "react",
+    "typescript",
+    "tailwind",
+    "fullstack",
+    "api",
+    "test"
+  ]
+}

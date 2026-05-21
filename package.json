@@ -1,0 +1,45 @@
+{
+  "name": "用户分配记录查询工作台",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "NODE_ENV=development next dev -p 8000",
+    "build": "next build",
+    "start": "next start -p 8000",
+    "lint": "next lint",
+    "db:init": "tsx --env-file=.env.local scripts/init-db.ts",
+    "publish": "node scripts/publish.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.78.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "next": "^16.2.0",
+    "pg": "^8.16.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^3.4.0",
+    "undici": "^7.16.0",
+    "dotenv": "^16.4.7",
+    "@octopus-sdk/browser-rum": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.3",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.33",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.1.18",
+    "tsx": "^4.20.6",
+    "typescript": "^5.5.3"
+  },
+  "optionalDependencies": {
+    "@esbuild/darwin-arm64": "^0.21.5",
+    "@esbuild/darwin-x64": "^0.21.5",
+    "@esbuild/linux-x64": "^0.21.5"
+  }
+}

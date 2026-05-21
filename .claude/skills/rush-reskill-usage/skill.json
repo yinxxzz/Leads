@@ -1,0 +1,5 @@
+{
+  "name": "@kanyun/rush-reskill-usage",
+  "version": "0.2.8",
+  "description": "Teaches AI agents how to use reskill — a Git-based package manager for AI agent skills. Covers install/publish/update/uninstall and Rush-specific behavior (scope auto-injection, in-Pod auto-auth). For creating a skill from scratch, hands off to rush-skill-creator."
+}
