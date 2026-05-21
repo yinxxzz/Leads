@@ -239,61 +239,256 @@ async function executeBigDataMcp<T>(sql: string, context: QueryContext): Promise
     throw new Error("未配置 ALLOCATION_BIGDATA_MCP_URL");
   }
 
+  const timeoutSeconds = Number(process.env.ALLOCATION_BIGDATA_MCP_TIMEOUT_SECONDS || 60);
+  // 外层 AbortController 比 MCP 内部超时多 30s 作为兜底
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), getSqlApiTimeoutMs());
+  const abortTimeout = setTimeout(() => controller.abort(), (timeoutSeconds + 30) * 1000);
 
   try {
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
         ...(process.env.ALLOCATION_BIGDATA_MCP_TOKEN
           ? { Authorization: `Bearer ${process.env.ALLOCATION_BIGDATA_MCP_TOKEN}` }
           : {}),
+        // 启用 adhoc 能力组
+        "X-Tool-Groups": "adhoc",
       },
       body: JSON.stringify({
-        toolName: "adhoc_submitQuery",
-        arguments: {
-          sql,
-          engine: "Spark",
-          catalog: context.catalog,
-          database: context.database,
-          timeoutSeconds: Number(process.env.ALLOCATION_BIGDATA_MCP_TIMEOUT_SECONDS || 60),
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "adhoc_submitQuery",
+          arguments: {
+            sql,
+            engine: "Spark",
+            catalog: context.catalog,
+            database: context.database,
+            timeoutSeconds,
+          },
         },
       }),
       signal: controller.signal,
     });
 
-    const payload = await response.json();
-    if (!response.ok) {
-      const errorPayload = payload as { error?: string; message?: string };
-      throw new Error(errorPayload.error || errorPayload.message || "大数据 MCP 查询失败");
+    const payload = await response.json() as {
+      jsonrpc: string;
+      id: number;
+      result?: {
+        content?: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+      error?: { message?: string };
+    };
+
+    if (!response.ok || payload.error) {
+      throw new Error(payload.error?.message || "大数据 MCP 请求失败");
     }
 
-    const result = payload as {
-      status?: string;
+    if (payload.result?.isError) {
+      const textContent = payload.result.content?.[0]?.text || "大数据 MCP 查询失败";
+      throw new Error(textContent);
+    }
+
+    const textContent = payload.result?.content?.[0]?.text;
+    if (!textContent) {
+      throw new Error("大数据 MCP 返回内容为空");
+    }
+
+    const inner = JSON.parse(textContent) as {
+      status: string;
       message?: string;
       data?: {
-        status?: string;
+        status: string;
         message?: string;
         columnNames?: string[];
-        rows?: T[];
-        results?: unknown[][];
+        columnTypes?: string[];
+        rows?: unknown[][];
+        rowCount?: number;
       };
     };
 
-    if (result.status === "ERROR" || result.data?.status === "失败") {
-      throw new Error(result.message || result.data?.message || "大数据 MCP 查询失败");
+    if (inner.status !== "SUCCESS" || inner.data?.status === "失败") {
+      throw new Error(inner.message || inner.data?.message || "大数据 MCP 查询失败");
     }
 
-    if (result.data?.columnNames && result.data.results) {
-      return rowsToObjects<T>(result.data.columnNames, result.data.results);
+    const { columnNames, rows } = inner.data || {};
+    if (columnNames && rows) {
+      return rowsToObjects<T>(columnNames, rows);
     }
 
-    return result.data?.rows || normalizeRows<T>(payload);
+    return [];
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(abortTimeout);
   }
+}
+
+async function executeBigDataMcpDownloadUrl(sql: string, context: QueryContext): Promise<string> {
+  const apiUrl = process.env.ALLOCATION_BIGDATA_MCP_URL;
+  if (!apiUrl) {
+    throw new Error("未配置 ALLOCATION_BIGDATA_MCP_URL");
+  }
+
+  const timeoutSeconds = Number(process.env.ALLOCATION_BIGDATA_MCP_TIMEOUT_SECONDS || 60);
+
+  const mcpHeaders = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+    "X-Tool-Groups": "adhoc",
+    ...(process.env.ALLOCATION_BIGDATA_MCP_TOKEN
+      ? { Authorization: `Bearer ${process.env.ALLOCATION_BIGDATA_MCP_TOKEN}` }
+      : {}),
+  };
+
+  // Step 1: 提交查询，立即返回 queryId（timeoutSeconds=0）
+  const submitRes = await fetch(apiUrl, {
+    method: "POST",
+    headers: mcpHeaders,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "adhoc_submitQuery",
+        arguments: {
+          sql,
+          engine: "Spark",
+          catalog: context.catalog,
+          database: context.database,
+          timeoutSeconds: 0,
+        },
+      },
+    }),
+  });
+
+  const submitPayload = await submitRes.json() as {
+    result?: { content?: Array<{ type: string; text: string }>; isError?: boolean };
+    error?: { message?: string };
+  };
+
+  if (!submitRes.ok || submitPayload.error) {
+    throw new Error(submitPayload.error?.message || "提交查询失败");
+  }
+
+  const submitText = submitPayload.result?.content?.[0]?.text;
+  if (!submitText) throw new Error("提交查询返回内容为空");
+
+  const submitInner = JSON.parse(submitText) as {
+    status: string;
+    message?: string;
+    data?: number | { queryId?: number; status?: string; message?: string };
+  };
+
+  // timeoutSeconds=0 时 data 直接是 queryId 数字；否则是对象
+  const queryId: number | undefined =
+    typeof submitInner.data === "number"
+      ? submitInner.data
+      : (submitInner.data as { queryId?: number })?.queryId;
+
+  if (!queryId) {
+    throw new Error(submitInner.message || "未获取到 queryId");
+  }
+
+  // Step 2: 轮询等待查询完成
+  const pollStart = Date.now();
+  const pollDeadline = pollStart + timeoutSeconds * 1000;
+  let queryDone = false;
+
+  while (Date.now() < pollDeadline) {
+    await new Promise((r) => setTimeout(r, 3000));
+
+    const pollRes = await fetch(apiUrl, {
+      method: "POST",
+      headers: mcpHeaders,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "adhoc_getQueryResult",
+          arguments: { queryId, timeoutSeconds: 5 },
+        },
+      }),
+    });
+
+    const pollPayload = await pollRes.json() as {
+      result?: { content?: Array<{ type: string; text: string }>; isError?: boolean };
+      error?: { message?: string };
+    };
+
+    const pollText = pollPayload.result?.content?.[0]?.text;
+    if (!pollText) continue;
+
+    const pollInner = JSON.parse(pollText) as {
+      status: string;
+      message?: string;
+      data?: { status?: string; message?: string; stackTrace?: string };
+    };
+
+    if (pollInner.data?.status === "失败") {
+      throw new Error(pollInner.data.message || pollInner.message || "查询失败");
+    }
+
+    if (pollInner.status === "SUCCESS" && pollInner.data?.status !== "运行中") {
+      queryDone = true;
+      break;
+    }
+  }
+
+  if (!queryDone) {
+    throw new Error("查询超时，请缩短时间范围后重试");
+  }
+
+  // Step 3: 获取下载 URL
+  const dlRes = await fetch(apiUrl, {
+    method: "POST",
+    headers: mcpHeaders,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "tools/call",
+      params: {
+        name: "adhoc_getQueryDownloadUrl",
+        arguments: { queryId, convertToExcel: false },
+      },
+    }),
+  });
+
+  const dlPayload = await dlRes.json() as {
+    result?: { content?: Array<{ type: string; text: string }>; isError?: boolean };
+    error?: { message?: string };
+  };
+
+  const dlText = dlPayload.result?.content?.[0]?.text;
+  if (!dlText) throw new Error("获取下载链接失败");
+
+  const dlInner = JSON.parse(dlText) as {
+    status: string;
+    message?: string;
+    data?: string | { downloadUrl?: string; url?: string };
+  };
+
+  // data 直接是字符串 URL，或者是对象
+  const downloadUrl = typeof dlInner.data === "string"
+    ? dlInner.data
+    : (dlInner.data?.downloadUrl || dlInner.data?.url);
+
+  if (!downloadUrl) {
+    throw new Error(dlInner.message || "未获取到下载链接");
+  }
+
+  return downloadUrl;
+}
+
+export async function getExportDownloadUrl(sql: string, context: QueryContext): Promise<string> {
+  const provider = getQueryProvider();
+  if (provider !== "bigdata-mcp") {
+    throw new Error("导出完整数据仅支持 bigdata-mcp 模式");
+  }
+  return executeBigDataMcpDownloadUrl(sql, context);
 }
 
 async function executeSql<T>(sql: string, context: QueryContext): Promise<T[]> {

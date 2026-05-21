@@ -69,11 +69,14 @@ export default function Home() {
   // UI state
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState(""); // 导出进度提示
+  const [exportError, setExportError] = useState(""); // 导出错误
   const [error, setError] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("bpo");
 
   const clearError = () => setError("");
+  const clearExportStatus = () => { setExportStatus(""); setExportError(""); };
 
   const handleQuery = useCallback(async () => {
     clearError();
@@ -121,10 +124,11 @@ export default function Home() {
 
   const handleExport = useCallback(async () => {
     clearError();
+    clearExportStatus();
 
     // Export validation
     if (!exportStartDate || !exportEndDate) {
-      setError("请选择导出开始日期和结束日期");
+      setExportError("请选择导出开始日期和结束日期");
       return;
     }
 
@@ -132,23 +136,37 @@ export default function Home() {
     const end = new Date(exportEndDate);
     const maxDate = new Date(today);
     if (start > maxDate || end > maxDate) {
-      setError("导出日期不能晚于今天");
+      setExportError("导出日期不能晚于今天");
       return;
     }
 
     if (start > end) {
-      setError("开始日期不能晚于结束日期");
+      setExportError("开始日期不能晚于结束日期");
       return;
     }
 
     const oneDayMs = 24 * 60 * 60 * 1000;
     const dayCount = Math.floor((end.getTime() - start.getTime()) / oneDayMs) + 1;
     if (dayCount > 14) {
-      setError("导出时间范围最多支持 14 天");
+      setExportError("导出时间范围最多支持 14 天");
       return;
     }
 
     setExporting(true);
+    setExportStatus("⏳ 正在提交查询，请稍候...");
+
+    // 倒计时提示
+    const totalSecs = 45;
+    let elapsed = 0;
+    const timer = setInterval(() => {
+      elapsed += 3;
+      if (elapsed < totalSecs) {
+        setExportStatus(`⏳ 查询运行中，预计还需 ${totalSecs - elapsed} 秒...`);
+      } else {
+        setExportStatus("⏳ 查询耗时较长，继续等待中...");
+      }
+    }, 3000);
+
     try {
       const res = await fetch("/api/allocation/export", {
         method: "POST",
@@ -162,18 +180,43 @@ export default function Home() {
         }),
       });
 
+      clearInterval(timer);
+
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "导出失败");
+        setExportError(data.error || "导出失败");
+        setExportStatus("");
         return;
       }
 
-      // Download file
-      const blob = await res.blob();
+      const data = await res.json();
+
+      // bigdata-mcp 模式：后端返回下载链接，前端直接触发下载
+      if (data.downloadUrl) {
+        const triggerDownload = (url: string) => {
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+        triggerDownload(data.downloadUrl);
+        if (data.tmkDownloadUrl) {
+          setTimeout(() => triggerDownload(data.tmkDownloadUrl), 500);
+          setExportStatus("✅ 查询完成！已触发 2 个文件下载（BPO + TMK），如未弹出请检查浏览器是否拦截了弹窗。链接 10 分钟内有效。");
+        } else {
+          setExportStatus("✅ 查询完成！文件正在下载，如未弹出请检查浏览器是否拦截了弹窗。链接 10 分钟内有效。");
+        }
+        return;
+      }
+
+      // 非 mcp 模式：后端直接返回 CSV blob
+      const blob = await new Response(JSON.stringify(data)).blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
 
-      // Extract filename from Content-Disposition header
       const disposition = res.headers.get("Content-Disposition");
       let filename = "export.csv";
       if (disposition) {
@@ -189,8 +232,11 @@ export default function Home() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      setExportStatus("✅ 文件已下载");
     } catch {
-      setError("网络请求失败，请检查网络连接");
+      clearInterval(timer);
+      setExportError("网络请求失败，请检查网络连接");
+      setExportStatus("");
     } finally {
       setExporting(false);
     }
@@ -385,6 +431,18 @@ export default function Home() {
             {exporting ? "导出中..." : "导出明细"}
           </button>
         </div>
+
+        {/* Export Status */}
+        {exportStatus && !exportError && (
+          <div className={`mt-3 px-4 py-3 rounded-xl text-sm ${exportStatus.startsWith("✅") ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-600"}`}>
+            {exportStatus}
+          </div>
+        )}
+        {exportError && (
+          <div className="mt-3 px-4 py-3 rounded-xl text-sm bg-red-50 text-red-600">
+            {exportError}
+          </div>
+        )}
       </section>
 
       {/* Summary Grid */}

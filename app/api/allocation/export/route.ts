@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   queryAllocationRecords,
+  getExportDownloadUrl,
+  buildBpoSql,
+  buildTmkSql,
 } from "../data-source";
-import type { Channel, DateMode } from "../data-source";
+import type { Channel, DateMode, AllocationQueryParams } from "../data-source";
 
 interface ExportRequest {
   uid?: string;
@@ -156,17 +159,48 @@ export async function POST(request: Request) {
     }
 
     const trimmedUid = uid?.trim() || "";
-    const csvRows: CsvRow[] = [];
-    const { bpoRecords, tmkRecords } = await queryAllocationRecords({
+    const params: AllocationQueryParams = {
       uid: trimmedUid || undefined,
       channel,
       dateMode,
       date,
       startDate,
       endDate,
-    });
+    };
 
-    // Filter and collect BPO records
+    const channelLabel = channel === "all" ? "all" : channel;
+    const uidLabel = trimmedUid || "all";
+    const dateLabel = rangeStart === rangeEnd ? rangeStart : `${rangeStart}_${rangeEnd}`;
+    const filename = `分配明细_${channelLabel}_${uidLabel}_${dateLabel}.csv`;
+
+    // bigdata-mcp 模式：返回下载 URL，前端直接触发下载（完整数据，无100条限制）
+    if (process.env.ALLOCATION_QUERY_PROVIDER === "bigdata-mcp" || process.env.ALLOCATION_BIGDATA_MCP_URL) {
+      if (channel === "bpo") {
+        const downloadUrl = await getExportDownloadUrl(buildBpoSql(params), {
+          catalog: "hive_f04", database: "dw_conan_ads", name: "export_bpo",
+        });
+        return NextResponse.json({ downloadUrl });
+      }
+
+      if (channel === "tmk") {
+        const downloadUrl = await getExportDownloadUrl(buildTmkSql(params), {
+          catalog: "hive_f04", database: "dw_ads", name: "export_tmk",
+        });
+        return NextResponse.json({ downloadUrl });
+      }
+
+      // channel === "all"：并发获取两个链接，都返给前端
+      const [bpoDownloadUrl, tmkDownloadUrl] = await Promise.all([
+        getExportDownloadUrl(buildBpoSql(params), { catalog: "hive_f04", database: "dw_conan_ads", name: "export_bpo" }),
+        getExportDownloadUrl(buildTmkSql(params), { catalog: "hive_f04", database: "dw_ads", name: "export_tmk" }),
+      ]);
+      return NextResponse.json({ downloadUrl: bpoDownloadUrl, tmkDownloadUrl });
+    }
+
+    // 非 bigdata-mcp 模式（mock / sql-api）走原有逻辑
+    const csvRows: CsvRow[] = [];
+    const { bpoRecords, tmkRecords } = await queryAllocationRecords(params);
+
     if (channel !== "tmk") {
       bpoRecords.forEach((r) => {
         csvRows.push({
@@ -183,7 +217,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Filter and collect TMK records
     if (channel !== "bpo") {
       tmkRecords.forEach((r) => {
         csvRows.push({
@@ -208,11 +241,6 @@ export async function POST(request: Request) {
     }
 
     const csv = buildCsv(csvRows);
-    const channelLabel = channel === "all" ? "all" : channel;
-    const uidLabel = trimmedUid || "all";
-    const dateLabel = rangeStart === rangeEnd ? rangeStart : `${rangeStart}_${rangeEnd}`;
-    const filename = `分配明细_${channelLabel}_${uidLabel}_${dateLabel}.csv`;
-
     return new Response(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
