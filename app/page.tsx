@@ -24,6 +24,16 @@ interface TmkRecord {
   queue_rnk: string;
 }
 
+interface CcRecord {
+  dt: string;
+  userid: string;
+  user_type: string;
+  business_line_type: string;
+  business_line_tag: string;
+  break_day_diff: string;
+  predict_rank: string;
+}
+
 interface QueryResult {
   uid: string;
   hasAllocation: boolean;
@@ -31,13 +41,15 @@ interface QueryResult {
   summary: {
     bpoCount: number;
     tmkCount: number;
+    ccCount: number;
   };
   bpoRecords: BpoRecord[];
   tmkRecords: TmkRecord[];
+  ccRecords: CcRecord[];
 }
 
-type Channel = "all" | "bpo" | "tmk";
-type Tab = "bpo" | "tmk";
+type Channel = "all" | "bpo" | "tmk" | "cc";
+type Tab = "bpo" | "tmk" | "cc";
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -112,6 +124,8 @@ export default function Home() {
       // Set active tab based on channel
       if (channel === "tmk") {
         setActiveTab("tmk");
+      } else if (channel === "cc") {
+        setActiveTab("cc");
       } else {
         setActiveTab("bpo");
       }
@@ -192,7 +206,7 @@ export default function Home() {
       const data = await res.json();
 
       // bigdata-mcp 模式：后端返回下载链接，前端直接触发下载
-      if (data.downloadUrl) {
+      if (data.downloadUrl || Array.isArray(data.downloadUrls)) {
         const triggerDownload = (url: string) => {
           const link = document.createElement("a");
           link.href = url;
@@ -202,10 +216,22 @@ export default function Home() {
           link.click();
           document.body.removeChild(link);
         };
-        triggerDownload(data.downloadUrl);
-        if (data.tmkDownloadUrl) {
-          setTimeout(() => triggerDownload(data.tmkDownloadUrl), 500);
-          setExportStatus("✅ 查询完成！已触发 2 个文件下载（BPO + TMK），如未弹出请检查浏览器是否拦截了弹窗。链接 10 分钟内有效。");
+
+        const downloadItems: Array<{ channel: string; url: string }> = Array.isArray(data.downloadUrls)
+          ? data.downloadUrls
+          : [
+            { channel: "BPO", url: data.downloadUrl },
+            ...(data.tmkDownloadUrl ? [{ channel: "TMK", url: data.tmkDownloadUrl }] : []),
+            ...(data.ccDownloadUrl ? [{ channel: "CC", url: data.ccDownloadUrl }] : []),
+          ];
+
+        downloadItems.forEach((item, index) => {
+          setTimeout(() => triggerDownload(item.url), index * 500);
+        });
+
+        if (downloadItems.length > 1) {
+          const channelText = downloadItems.map((item) => item.channel).join(" + ");
+          setExportStatus(`✅ 查询完成！已触发 ${downloadItems.length} 个文件下载（${channelText}），如未弹出请检查浏览器是否拦截了弹窗。链接 10 分钟内有效。`);
         } else {
           setExportStatus("✅ 查询完成！文件正在下载，如未弹出请检查浏览器是否拦截了弹窗。链接 10 分钟内有效。");
         }
@@ -255,7 +281,7 @@ export default function Home() {
 
   // Determine which tabs to show
   const visibleTabs: Tab[] =
-    channel === "bpo" ? ["bpo"] : channel === "tmk" ? ["tmk"] : ["bpo", "tmk"];
+    channel === "bpo" ? ["bpo"] : channel === "tmk" ? ["tmk"] : channel === "cc" ? ["cc"] : ["bpo", "tmk", "cc"];
 
   const currentActiveTab = visibleTabs.includes(activeTab)
     ? activeTab
@@ -283,6 +309,17 @@ export default function Home() {
     ["queue_rnk", "队列排名"],
   ];
 
+  // CC columns
+  const ccColumns: [string, string][] = [
+    ["dt", "分配日期"],
+    ["userid", "用户 UID"],
+    ["user_type", "用户类型"],
+    ["business_line_type", "业务线类型"],
+    ["business_line_tag", "业务线标签"],
+    ["break_day_diff", "断课天数差"],
+    ["predict_rank", "预测排名"],
+  ];
+
   return (
     <main className="max-w-[1180px] mx-auto px-6 py-8 pb-12">
       {/* Header */}
@@ -291,7 +328,7 @@ export default function Home() {
           用户分配记录查询工作台
         </h1>
         <p className="text-sm text-gray-500">
-          输入用户 UID，查询该用户在 BPO / TMK
+          输入用户 UID，查询该用户在 BPO / TMK / CC
           渠道下是否进入分配池，以及对应分配日期、渠道、排名等信息。
         </p>
       </section>
@@ -335,6 +372,7 @@ export default function Home() {
               <option value="all">全部</option>
               <option value="bpo">BPO</option>
               <option value="tmk">TMK</option>
+              <option value="cc">CC</option>
             </select>
           </div>
 
@@ -393,6 +431,7 @@ export default function Home() {
               <option value="all">全部</option>
               <option value="bpo">BPO</option>
               <option value="tmk">TMK</option>
+              <option value="cc">CC</option>
             </select>
           </div>
 
@@ -447,7 +486,7 @@ export default function Home() {
 
       {/* Summary Grid */}
       {result && (
-        <section className="grid grid-cols-2 md:grid-cols-5 gap-3.5 mb-5">
+        <section className="grid grid-cols-2 md:grid-cols-6 gap-3.5 mb-5">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">查询 UID</div>
             <div className="text-[22px] font-bold">{result.uid}</div>
@@ -481,6 +520,12 @@ export default function Home() {
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
+            <div className="text-[13px] text-gray-500 mb-2">CC 记录数</div>
+            <div className="text-[22px] font-bold">
+              {result.summary.ccCount} 条
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">最近分配日期</div>
             <div className="text-[22px] font-bold">{result.latestDt}</div>
           </div>
@@ -502,10 +547,12 @@ export default function Home() {
                     : "bg-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {tab === "bpo" ? "BPO 分配记录" : "TMK 分配记录"}（
+                {tab === "bpo" ? "BPO 分配记录" : tab === "tmk" ? "TMK 分配记录" : "CC 分配记录"}（
                 {tab === "bpo"
                   ? result.bpoRecords.length
-                  : result.tmkRecords.length}
+                  : tab === "tmk"
+                    ? result.tmkRecords.length
+                    : result.ccRecords.length}
                 ）
               </button>
             ))}
@@ -521,6 +568,11 @@ export default function Home() {
             {currentActiveTab === "tmk" && result.tmkRecords.length === 0 && (
               <div className="py-10 text-center text-gray-500">
                 该用户暂无 TMK 分配记录
+              </div>
+            )}
+            {currentActiveTab === "cc" && result.ccRecords.length === 0 && (
+              <div className="py-10 text-center text-gray-500">
+                该用户暂无 CC 分配记录
               </div>
             )}
 
@@ -577,6 +629,41 @@ export default function Home() {
                   {result.tmkRecords.map((record, idx) => (
                     <tr key={idx} className="hover:bg-gray-50/50">
                       {tmkColumns.map(([key]) => (
+                        <td
+                          key={key}
+                          className="border-b border-gray-200 px-2.5 py-3 text-gray-900 whitespace-nowrap"
+                        >
+                          {String(
+                            (record as unknown as Record<string, unknown>)[
+                              key
+                            ] ?? "-"
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {currentActiveTab === "cc" && result.ccRecords.length > 0 && (
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead>
+                  <tr>
+                    {ccColumns.map(([, label]) => (
+                      <th
+                        key={label}
+                        className="border-b border-gray-200 px-2.5 py-3 text-left text-gray-700 font-bold bg-gray-50 whitespace-nowrap"
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.ccRecords.map((record, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50/50">
+                      {ccColumns.map(([key]) => (
                         <td
                           key={key}
                           className="border-b border-gray-200 px-2.5 py-3 text-gray-900 whitespace-nowrap"

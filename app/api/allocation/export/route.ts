@@ -3,6 +3,7 @@ import {
   queryAllocationRecords,
   getExportDownloadUrl,
   buildBpoSql,
+  buildCcSql,
   buildTmkSql,
 } from "../data-source";
 import type { Channel, DateMode, AllocationQueryParams } from "../data-source";
@@ -79,9 +80,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!["all", "bpo", "tmk"].includes(channel)) {
+    if (!["all", "bpo", "tmk", "cc"].includes(channel)) {
       return NextResponse.json(
-        { error: "channel 只能是 all / bpo / tmk" },
+        { error: "channel 只能是 all / bpo / tmk / cc" },
         { status: 400 }
       );
     }
@@ -189,19 +190,36 @@ export async function POST(request: Request) {
         return NextResponse.json({ downloadUrl });
       }
 
-      // channel === "all"：并发获取两个链接，都返给前端
-      const [bpoDownloadUrl, tmkDownloadUrl] = await Promise.all([
+      if (channel === "cc") {
+        const downloadUrl = await getExportDownloadUrl(buildCcSql(params), {
+          catalog: "hive_f04", database: "dw_dwd", name: "export_cc",
+        });
+        return NextResponse.json({ downloadUrl });
+      }
+
+      // channel === "all"：并发获取三个链接，都返给前端
+      const [bpoDownloadUrl, tmkDownloadUrl, ccDownloadUrl] = await Promise.all([
         getExportDownloadUrl(buildBpoSql(params), { catalog: "hive_f04", database: "dw_conan_ads", name: "export_bpo" }),
         getExportDownloadUrl(buildTmkSql(params), { catalog: "hive_f04", database: "dw_ads", name: "export_tmk" }),
+        getExportDownloadUrl(buildCcSql(params), { catalog: "hive_f04", database: "dw_dwd", name: "export_cc" }),
       ]);
-      return NextResponse.json({ downloadUrl: bpoDownloadUrl, tmkDownloadUrl });
+      return NextResponse.json({
+        downloadUrl: bpoDownloadUrl,
+        tmkDownloadUrl,
+        ccDownloadUrl,
+        downloadUrls: [
+          { channel: "BPO", url: bpoDownloadUrl },
+          { channel: "TMK", url: tmkDownloadUrl },
+          { channel: "CC", url: ccDownloadUrl },
+        ],
+      });
     }
 
     // 非 bigdata-mcp 模式（mock / sql-api）走原有逻辑
     const csvRows: CsvRow[] = [];
-    const { bpoRecords, tmkRecords } = await queryAllocationRecords(params);
+    const { bpoRecords, tmkRecords, ccRecords } = await queryAllocationRecords(params);
 
-    if (channel !== "tmk") {
+    if (channel === "all" || channel === "bpo") {
       bpoRecords.forEach((r) => {
         csvRows.push({
           channel: "BPO",
@@ -217,7 +235,7 @@ export async function POST(request: Request) {
       });
     }
 
-    if (channel !== "bpo") {
+    if (channel === "all" || channel === "tmk") {
       tmkRecords.forEach((r) => {
         csvRows.push({
           channel: "TMK",
@@ -229,6 +247,22 @@ export async function POST(request: Request) {
           grade: r.grade,
           rank: r.queue_rnk,
           extraInfo: "",
+        });
+      });
+    }
+
+    if (channel === "all" || channel === "cc") {
+      ccRecords.forEach((r) => {
+        csvRows.push({
+          channel: "CC",
+          dt: r.dt,
+          uid: r.userid,
+          phone: "",
+          leadType: r.business_line_type,
+          userTypeOrChannel: r.user_type,
+          grade: r.business_line_tag,
+          rank: r.predict_rank,
+          extraInfo: `break_day_diff=${r.break_day_diff}`,
         });
       });
     }

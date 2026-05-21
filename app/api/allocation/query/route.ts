@@ -31,9 +31,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!["all", "bpo", "tmk"].includes(channel)) {
+    if (!["all", "bpo", "tmk", "cc"].includes(channel)) {
       return NextResponse.json(
-        { error: "channel 只能是 all / bpo / tmk" },
+        { error: "channel 只能是 all / bpo / tmk / cc" },
         { status: 400 }
       );
     }
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const { bpoRecords, tmkRecords } = await queryAllocationRecords({
+    const { bpoRecords, tmkRecords, ccRecords } = await queryAllocationRecords({
       uid: uid.trim(),
       channel,
       dateMode,
@@ -71,12 +71,13 @@ export async function POST(request: Request) {
     const allDates = [
       ...bpoRecords.map((r) => r.dt),
       ...tmkRecords.map((r) => r.dt),
+      ...ccRecords.map((r) => r.dt),
     ]
       .filter(Boolean)
       .sort()
       .reverse();
 
-    const hasAllocation = bpoRecords.length > 0 || tmkRecords.length > 0;
+    const hasAllocation = bpoRecords.length > 0 || tmkRecords.length > 0 || ccRecords.length > 0;
     const latestDt = allDates[0] || "-";
 
     return NextResponse.json({
@@ -86,9 +87,11 @@ export async function POST(request: Request) {
       summary: {
         bpoCount: bpoRecords.length,
         tmkCount: tmkRecords.length,
+        ccCount: ccRecords.length,
       },
       bpoRecords,
       tmkRecords,
+      ccRecords,
     });
   } catch (error) {
     return NextResponse.json(

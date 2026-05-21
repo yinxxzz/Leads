@@ -1,10 +1,11 @@
 import {
   mockBpoRecords,
+  mockCcRecords,
   mockTmkRecords,
 } from "./mock-data";
-import type { BpoRecord, TmkRecord } from "./mock-data";
+import type { BpoRecord, CcRecord, TmkRecord } from "./mock-data";
 
-export type Channel = "all" | "bpo" | "tmk";
+export type Channel = "all" | "bpo" | "tmk" | "cc";
 export type DateMode = "specific" | "range" | "all_time";
 
 export interface AllocationQueryParams {
@@ -19,6 +20,7 @@ export interface AllocationQueryParams {
 export interface AllocationQueryResult {
   bpoRecords: BpoRecord[];
   tmkRecords: TmkRecord[];
+  ccRecords: CcRecord[];
 }
 
 type QueryProvider = "mock" | "sql-api" | "bigdata-mcp";
@@ -139,6 +141,28 @@ ${dateCondition}
 ORDER BY
     dt DESC
     ,CAST(queue_rnk AS BIGINT)
+LIMIT 100000
+`.trim();
+}
+
+export function buildCcSql(params: AllocationQueryParams): string {
+  const uidCondition = params.uid ? `  and userid = '${params.uid}'` : "";
+  const dateCondition = buildDateCondition(params);
+
+  return `
+SELECT
+    dt
+    ,userid
+    ,user_type
+    ,business_line_type
+    ,business_line_tag
+    ,break_day_diff
+    ,predict_rank
+FROM dw_dwd.dwd_conan_user_cc_total_all_age_da_no_sensitive_view
+WHERE 1 = 1
+${uidCondition}
+${dateCondition}
+ORDER BY dt DESC
 LIMIT 100000
 `.trim();
 }
@@ -518,23 +542,31 @@ function queryMockRecords(params: AllocationQueryParams): AllocationQueryResult 
     return true;
   };
 
-  const bpoRecords = params.channel === "tmk"
+  const bpoRecords = params.channel !== "all" && params.channel !== "bpo"
     ? []
     : mockBpoRecords.filter((record) => {
       const uidMatched = params.uid ? record.userid === params.uid : true;
       return uidMatched && dateMatched(record.dt);
     });
 
-  const tmkRecords = params.channel === "bpo"
+  const tmkRecords = params.channel !== "all" && params.channel !== "tmk"
     ? []
     : mockTmkRecords.filter((record) => {
       const uidMatched = params.uid ? record.user_id === params.uid : true;
       return uidMatched && dateMatched(record.dt);
     });
 
+  const ccRecords = params.channel !== "all" && params.channel !== "cc"
+    ? []
+    : mockCcRecords.filter((record) => {
+      const uidMatched = params.uid ? record.userid === params.uid : true;
+      return uidMatched && dateMatched(record.dt);
+    });
+
   return {
     bpoRecords,
     tmkRecords,
+    ccRecords,
   };
 }
 
@@ -552,26 +584,34 @@ export async function queryAllocationRecords(
   }
 
   try {
-    const [bpoRecords, tmkRecords] = await Promise.all([
-      params.channel === "tmk"
+    const [bpoRecords, tmkRecords, ccRecords] = await Promise.all([
+      params.channel !== "all" && params.channel !== "bpo"
         ? Promise.resolve([])
         : executeSql<BpoRecord>(buildBpoSql(params), {
           catalog: "hive_f04",
           database: "dw_conan_ads",
           name: "allocation_bpo_query",
         }),
-      params.channel === "bpo"
+      params.channel !== "all" && params.channel !== "tmk"
         ? Promise.resolve([])
         : executeSql<TmkRecord>(buildTmkSql(params), {
           catalog: "hive_f04",
           database: "dw_ads",
           name: "allocation_tmk_query",
         }),
+      params.channel !== "all" && params.channel !== "cc"
+        ? Promise.resolve([])
+        : executeSql<CcRecord>(buildCcSql(params), {
+          catalog: "hive_f04",
+          database: "dw_dwd",
+          name: "allocation_cc_query",
+        }),
     ]);
 
     return {
       bpoRecords,
       tmkRecords,
+      ccRecords,
     };
   } catch (error) {
     if (getUseMockFallback()) {
