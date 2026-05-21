@@ -23,12 +23,12 @@ export interface TmkRecord {
 
 export interface CcRecord {
   dt: string;
-  userid: string;
-  user_type: string;
-  business_line_type: string;
-  business_line_tag: string;
-  break_day_diff: string;
+  user_id: string;
+  leadtype: string;
+  grade: string;
+  final_rank: string;
   predict_rank: string;
+  business_line_type: string;
 }
 
 export const mockBpoRecords: BpoRecord[] = [
@@ -112,20 +112,20 @@ export const mockTmkRecords: TmkRecord[] = [
 export const mockCcRecords: CcRecord[] = [
   {
     dt: "2026-05-20",
-    userid: "464677672",
-    user_type: "体验课全断课",
-    business_line_type: "APP活跃",
-    business_line_tag: "10",
-    break_day_diff: "25",
+    user_id: "464677672",
+    leadtype: "20",
+    grade: "A",
+    final_rank: "1234",
     predict_rank: "5.4",
+    business_line_type: "APP活跃",
   },
   {
-    dt: "2026-01-22",
-    userid: "464677672",
-    user_type: "体验课全断课",
-    business_line_type: "客服咨询&优惠券_下单未支付_观看直播(7岁以上)",
-    business_line_tag: "1",
-    break_day_diff: "null",
-    predict_rank: "5.5",
+    dt: "2026-05-18",
+    user_id: "464677672",
+    leadtype: "20",
+    grade: "B",
+    final_rank: "3456",
+    predict_rank: "4.2",
+    business_line_type: "补课复习",
   },
 ];

@@ -192,7 +192,7 @@ export async function POST(request: Request) {
 
       if (channel === "cc") {
         const downloadUrl = await getExportDownloadUrl(buildCcSql(params), {
-          catalog: "hive_f04", database: "dw_dwd", name: "export_cc",
+          catalog: "hive_f04", database: "dw_ads", name: "export_cc",
         });
         return NextResponse.json({ downloadUrl });
       }
@@ -201,7 +201,7 @@ export async function POST(request: Request) {
       const [bpoDownloadUrl, tmkDownloadUrl, ccDownloadUrl] = await Promise.all([
         getExportDownloadUrl(buildBpoSql(params), { catalog: "hive_f04", database: "dw_conan_ads", name: "export_bpo" }),
         getExportDownloadUrl(buildTmkSql(params), { catalog: "hive_f04", database: "dw_ads", name: "export_tmk" }),
-        getExportDownloadUrl(buildCcSql(params), { catalog: "hive_f04", database: "dw_dwd", name: "export_cc" }),
+        getExportDownloadUrl(buildCcSql(params), { catalog: "hive_f04", database: "dw_ads", name: "export_cc" }),
       ]);
       return NextResponse.json({
         downloadUrl: bpoDownloadUrl,
@@ -256,13 +256,13 @@ export async function POST(request: Request) {
         csvRows.push({
           channel: "CC",
           dt: r.dt,
-          uid: r.userid,
+          uid: r.user_id,
           phone: "",
-          leadType: r.business_line_type,
-          userTypeOrChannel: r.user_type,
-          grade: r.business_line_tag,
-          rank: r.predict_rank,
-          extraInfo: `break_day_diff=${r.break_day_diff}`,
+          leadType: r.leadtype,
+          userTypeOrChannel: r.business_line_type,
+          grade: r.grade,
+          rank: r.final_rank,
+          extraInfo: `predict_rank=${r.predict_rank}`,
         });
       });
     }

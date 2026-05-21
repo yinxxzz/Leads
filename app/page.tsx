@@ -26,12 +26,12 @@ interface TmkRecord {
 
 interface CcRecord {
   dt: string;
-  userid: string;
-  user_type: string;
-  business_line_type: string;
-  business_line_tag: string;
-  break_day_diff: string;
+  user_id: string;
+  leadtype: string;
+  grade: string;
+  final_rank: string;
   predict_rank: string;
+  business_line_type: string;
 }
 
 interface QueryResult {
@@ -312,12 +312,12 @@ export default function Home() {
   // CC columns
   const ccColumns: [string, string][] = [
     ["dt", "分配日期"],
-    ["userid", "用户 UID"],
-    ["user_type", "用户类型"],
-    ["business_line_type", "业务线类型"],
-    ["business_line_tag", "业务线标签"],
-    ["break_day_diff", "断课天数差"],
+    ["user_id", "用户 UID"],
+    ["leadtype", "线索类型"],
+    ["grade", "年级"],
+    ["final_rank", "最终排名"],
     ["predict_rank", "预测排名"],
+    ["business_line_type", "业务线类型"],
   ];
 
   return (

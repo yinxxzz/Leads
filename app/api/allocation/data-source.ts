@@ -146,23 +146,24 @@ LIMIT 100000
 }
 
 export function buildCcSql(params: AllocationQueryParams): string {
-  const uidCondition = params.uid ? `  and userid = '${params.uid}'` : "";
+  const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
   const dateCondition = buildDateCondition(params);
 
   return `
 SELECT
     dt
-    ,userid
-    ,user_type
-    ,business_line_type
-    ,business_line_tag
-    ,break_day_diff
+    ,user_id
+    ,leadtype
+    ,grade
+    ,final_rank
     ,predict_rank
-FROM dw_dwd.dwd_conan_user_cc_total_all_age_da_no_sensitive_view
+    ,business_line_type
+FROM dw_ads.ads_conan_user_cc_total_all_age_with_grade_di
 WHERE 1 = 1
+  AND CAST(final_rank AS BIGINT) <= 7000
 ${uidCondition}
 ${dateCondition}
-ORDER BY dt DESC
+ORDER BY dt DESC, CAST(final_rank AS BIGINT)
 LIMIT 100000
 `.trim();
 }
@@ -559,7 +560,7 @@ function queryMockRecords(params: AllocationQueryParams): AllocationQueryResult 
   const ccRecords = params.channel !== "all" && params.channel !== "cc"
     ? []
     : mockCcRecords.filter((record) => {
-      const uidMatched = params.uid ? record.userid === params.uid : true;
+      const uidMatched = params.uid ? record.user_id === params.uid : true;
       return uidMatched && dateMatched(record.dt);
     });
 
@@ -603,7 +604,7 @@ export async function queryAllocationRecords(
         ? Promise.resolve([])
         : executeSql<CcRecord>(buildCcSql(params), {
           catalog: "hive_f04",
-          database: "dw_dwd",
+          database: "dw_ads",
           name: "allocation_cc_query",
         }),
     ]);
