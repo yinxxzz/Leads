@@ -5,6 +5,10 @@ import './globals.css';
 export const metadata: Metadata = {
   title: '用户分配记录查询工作台',
   description: '查询用户在 BPO / TMK 渠道下的分配记录',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({

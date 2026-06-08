@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Search, Download, RotateCcw } from "lucide-react";
 
 // Types
@@ -69,14 +69,31 @@ function getYesterday(): string {
   return formatLocalDate(d);
 }
 
+function getEarliestExportDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  return formatLocalDate(d);
+}
+
 export default function Home() {
   // Form state
   const [uid, setUid] = useState("");
   const [channel, setChannel] = useState<Channel>("all");
   const [exportChannel, setExportChannel] = useState<Channel>("all");
-  const [exportStartDate, setExportStartDate] = useState(getYesterday());
-  const [exportEndDate, setExportEndDate] = useState(getYesterday());
-  const today = getToday();
+  const [dateReady, setDateReady] = useState(false);
+  const [today, setToday] = useState("");
+  const [earliestExportDate, setEarliestExportDate] = useState("");
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
+
+  useEffect(() => {
+    const yesterday = getYesterday();
+    setToday(getToday());
+    setEarliestExportDate(getEarliestExportDate());
+    setExportStartDate(yesterday);
+    setExportEndDate(yesterday);
+    setDateReady(true);
+  }, []);
 
   // UI state
   const [loading, setLoading] = useState(false);
@@ -268,12 +285,27 @@ export default function Home() {
     }
   }, [exportChannel, exportStartDate, exportEndDate, today]);
 
+  const handleExportStartDateChange = (value: string) => {
+    setExportStartDate(value);
+    if (exportEndDate && value > exportEndDate) {
+      setExportEndDate(value);
+    }
+  };
+
+  const handleExportEndDateChange = (value: string) => {
+    setExportEndDate(value);
+    if (exportStartDate && value < exportStartDate) {
+      setExportStartDate(value);
+    }
+  };
+
   const handleReset = () => {
+    const yesterday = getYesterday();
     setUid("");
     setChannel("all");
     setExportChannel("all");
-    setExportStartDate(getYesterday());
-    setExportEndDate(getYesterday());
+    setExportStartDate(yesterday);
+    setExportEndDate(yesterday);
     setError("");
     setResult(null);
     setActiveTab("bpo");
@@ -414,7 +446,7 @@ export default function Home() {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">导出分配明细</h2>
           <p className="mt-1 text-[13px] text-gray-500">
-            支持导出某一天或一段时间的全部明细，时间范围最多 14 天，不需要填写 UID。
+            支持导出某一天或一段时间的全部明细，时间范围最多 14 天，不需要填写 UID。默认可选昨天及更早日期，最晚到今天。
           </p>
         </div>
 
@@ -442,9 +474,11 @@ export default function Home() {
             <input
               type="date"
               value={exportStartDate}
-              max={today}
-              onChange={(e) => setExportStartDate(e.target.value)}
-              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-[10px] outline-none focus:border-blue-600 focus:ring-[3px] focus:ring-blue-600/10 transition"
+              min={dateReady ? earliestExportDate : undefined}
+              max={dateReady ? today : undefined}
+              disabled={!dateReady}
+              onChange={(e) => handleExportStartDateChange(e.target.value)}
+              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-[10px] outline-none focus:border-blue-600 focus:ring-[3px] focus:ring-blue-600/10 transition disabled:bg-gray-50"
             />
           </div>
 
@@ -455,9 +489,11 @@ export default function Home() {
             <input
               type="date"
               value={exportEndDate}
-              max={today}
-              onChange={(e) => setExportEndDate(e.target.value)}
-              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-[10px] outline-none focus:border-blue-600 focus:ring-[3px] focus:ring-blue-600/10 transition"
+              min={dateReady ? earliestExportDate : undefined}
+              max={dateReady ? today : undefined}
+              disabled={!dateReady}
+              onChange={(e) => handleExportEndDateChange(e.target.value)}
+              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-[10px] outline-none focus:border-blue-600 focus:ring-[3px] focus:ring-blue-600/10 transition disabled:bg-gray-50"
             />
           </div>
 
