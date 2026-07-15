@@ -144,9 +144,5 @@ async function initWithPostgres(
   await client.end();
 }
 
-// 主程序
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
-
-if (isMainModule) {
-  initDatabase();
-}
+// 本文件只作为命令行初始化脚本执行。
+void initDatabase();

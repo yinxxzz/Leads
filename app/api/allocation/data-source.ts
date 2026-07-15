@@ -4,6 +4,8 @@ import {
   mockTmkRecords,
 } from "./mock-data";
 import type { BpoRecord, CcRecord, TmkRecord } from "./mock-data";
+import { queryCachedAllocationRecords } from "./cache";
+import { parse } from "csv-parse/sync";
 
 export type Channel = "all" | "bpo" | "tmk" | "cc";
 export type DateMode = "specific" | "range" | "all_time";
@@ -106,14 +108,10 @@ export function buildBpoSql(params: AllocationQueryParams): string {
 
   return `
 select
-    coalesce(default.encrypt_with_passid(call_user_type,'00stuvwx7a'), '0') as phone
+    ${bpoAssignDateExpression} as dt
     ,user_id as userid
-    ,'externalLead' as leadType
-    ,${bpoAssignDateExpression} as dt
-    ,'unset' as grade
     ,case when channel='百科存量' then 'pediaStock' else channel end as userType
-    ,row_number() over(order by rand(2026)) as rank
-    ,'unset' as extraInfo
+    ,row_number() over(partition by ${bpoAssignDateExpression} order by rand(2026)) as rank
 from dw_conan_ads.ads_eng_tmk_hunt_side_user_detail_di_no_sensitive_view
 where call_user_type != '0'
 ${uidCondition}
@@ -131,8 +129,6 @@ SELECT
     dt
     ,user_id
     ,lead_channel
-    ,hunt_lead_type
-    ,grade
     ,queue_rnk
 FROM dw_ads.ads_eng_tmk_hunt_all_user_detail_with_grade_di_no_sensitive_view
 WHERE 1 = 1
@@ -141,7 +137,6 @@ ${dateCondition}
 ORDER BY
     dt DESC
     ,CAST(queue_rnk AS BIGINT)
-LIMIT 100000
 `.trim();
 }
 
@@ -153,10 +148,7 @@ export function buildCcSql(params: AllocationQueryParams): string {
 SELECT
     dt
     ,user_id
-    ,leadtype
-    ,grade
     ,final_rank
-    ,predict_rank
     ,business_line_type
 FROM dw_ads.ads_conan_user_cc_total_all_age_with_grade_di
 WHERE 1 = 1
@@ -164,7 +156,6 @@ WHERE 1 = 1
 ${uidCondition}
 ${dateCondition}
 ORDER BY dt DESC, CAST(final_rank AS BIGINT)
-LIMIT 100000
 `.trim();
 }
 
@@ -516,6 +507,39 @@ export async function getExportDownloadUrl(sql: string, context: QueryContext): 
   return executeBigDataMcpDownloadUrl(sql, context);
 }
 
+async function executeBigDataMcpCsv<T>(sql: string, context: QueryContext): Promise<T[]> {
+  const downloadUrl = await executeBigDataMcpDownloadUrl(sql, context);
+  const response = await fetch(downloadUrl);
+  if (!response.ok) throw new Error(`完整CSV下载失败：HTTP ${response.status}`);
+  const csv = await response.text();
+  return parse(csv, {
+    bom: true,
+    columns: true,
+    skip_empty_lines: true,
+    relax_column_count: true,
+  }) as T[];
+}
+
+export async function queryAllocationRecordsForCache(
+  params: AllocationQueryParams,
+): Promise<AllocationQueryResult> {
+  if (getQueryProvider() !== "bigdata-mcp") {
+    return queryAllocationRecordsFromSource(params);
+  }
+  const [bpoRecords, tmkRecords, ccRecords] = await Promise.all([
+    executeBigDataMcpCsv<BpoRecord>(buildBpoSql(params), {
+      catalog: "hive_f04", database: "dw_conan_ads", name: "allocation_cache_bpo",
+    }),
+    executeBigDataMcpCsv<TmkRecord>(buildTmkSql(params), {
+      catalog: "hive_f04", database: "dw_ads", name: "allocation_cache_tmk",
+    }),
+    executeBigDataMcpCsv<CcRecord>(buildCcSql(params), {
+      catalog: "hive_f04", database: "dw_ads", name: "allocation_cache_cc",
+    }),
+  ]);
+  return { bpoRecords, tmkRecords, ccRecords };
+}
+
 async function executeSql<T>(sql: string, context: QueryContext): Promise<T[]> {
   const provider = getQueryProvider();
 
@@ -572,6 +596,21 @@ function queryMockRecords(params: AllocationQueryParams): AllocationQueryResult 
 }
 
 export async function queryAllocationRecords(
+  params: AllocationQueryParams,
+): Promise<AllocationQueryResult> {
+  assertSafeUid(params.uid);
+  assertSafeDate(params.date);
+  if (params.dateMode === "range") {
+    assertSafeDateRange(params.startDate, params.endDate);
+  }
+
+  const cached = await queryCachedAllocationRecords(params);
+  if (cached) return cached;
+
+  return queryAllocationRecordsFromSource(params);
+}
+
+export async function queryAllocationRecordsFromSource(
   params: AllocationQueryParams,
 ): Promise<AllocationQueryResult> {
   assertSafeUid(params.uid);

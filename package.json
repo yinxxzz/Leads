@@ -8,26 +8,30 @@
     "start": "next start -p 8000",
     "lint": "next lint",
     "db:init": "tsx --env-file=.env.local scripts/init-db.ts",
+    "cache:import": "tsx --env-file=.env.local scripts/import-cache-csv.ts",
     "publish": "node scripts/publish.js"
   },
   "dependencies": {
+    "@octopus-sdk/browser-rum": "latest",
     "@supabase/supabase-js": "^2.78.0",
     "@tailwindcss/postcss": "^4.1.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "csv-parse": "^6.2.1",
+    "dotenv": "^16.4.7",
     "lucide-react": "^0.548.0",
     "next": "^16.2.0",
     "pg": "^8.16.3",
+    "pg-copy-streams": "^7.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwind-merge": "^3.4.0",
-    "undici": "^7.16.0",
-    "dotenv": "^16.4.7",
-    "@octopus-sdk/browser-rum": "latest"
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/pg": "^8.15.6",
+    "@types/pg-copy-streams": "^1.2.5",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "eslint": "^8.57.0",
