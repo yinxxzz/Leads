@@ -7,30 +7,21 @@ import { Search, Download, RotateCcw } from "lucide-react";
 interface BpoRecord {
   dt: string;
   userid: string;
-  phone: string;
-  leadType: string;
   userType: string;
-  grade: string;
   rank: number;
-  extraInfo: string;
 }
 
 interface TmkRecord {
   dt: string;
   user_id: string;
   lead_channel: string;
-  hunt_lead_type: string;
-  grade: string;
   queue_rnk: string;
 }
 
 interface CcRecord {
   dt: string;
   user_id: string;
-  leadtype: string;
-  grade: string;
   final_rank: string;
-  predict_rank: string;
   business_line_type: string;
 }
 
@@ -46,6 +37,8 @@ interface QueryResult {
   bpoRecords: BpoRecord[];
   tmkRecords: TmkRecord[];
   ccRecords: CcRecord[];
+  dataSource: "cache" | "warehouse";
+  rangeLabel: string;
 }
 
 type Channel = "all" | "bpo" | "tmk" | "cc";
@@ -107,7 +100,7 @@ export default function Home() {
   const clearError = () => setError("");
   const clearExportStatus = () => { setExportStatus(""); setExportError(""); };
 
-  const handleQuery = useCallback(async () => {
+  const handleQuery = useCallback(async (includeHistory = false) => {
     clearError();
 
     // Client-side validation
@@ -128,6 +121,7 @@ export default function Home() {
           uid: uid.trim(),
           channel,
           dateMode: "all_time",
+          includeHistory,
         }),
       });
 
@@ -323,12 +317,8 @@ export default function Home() {
   const bpoColumns: [string, string][] = [
     ["dt", "分配日期"],
     ["userid", "用户 UID"],
-    ["phone", "手机号"],
-    ["leadType", "线索类型"],
     ["userType", "用户类型"],
-    ["grade", "年级"],
     ["rank", "排名"],
-    ["extraInfo", "扩展信息"],
   ];
 
   // TMK columns
@@ -336,8 +326,6 @@ export default function Home() {
     ["dt", "分配日期"],
     ["user_id", "用户 UID"],
     ["lead_channel", "线索渠道"],
-    ["hunt_lead_type", "线索类型"],
-    ["grade", "年级"],
     ["queue_rnk", "队列排名"],
   ];
 
@@ -345,10 +333,7 @@ export default function Home() {
   const ccColumns: [string, string][] = [
     ["dt", "分配日期"],
     ["user_id", "用户 UID"],
-    ["leadtype", "线索类型"],
-    ["grade", "年级"],
     ["final_rank", "最终排名"],
-    ["predict_rank", "预测排名"],
     ["business_line_type", "业务线类型"],
   ];
 
@@ -370,11 +355,11 @@ export default function Home() {
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-900">查询单个 UID 分配记录</h2>
           <p className="mt-1 text-[13px] text-gray-500">
-            UID 查询默认查历史记录，不需要选择时间。
+            默认秒查最近90天缓存；需要更早记录时可单独查询数仓历史。
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_auto_auto] gap-3.5 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_auto_auto_auto] gap-3.5 items-end">
           {/* UID Input */}
           <div>
             <label className="block mb-2 text-[13px] font-semibold text-gray-700">
@@ -386,7 +371,7 @@ export default function Home() {
               placeholder="请输入单个 UID，例如 123456789"
               className="w-full h-10 px-3 text-sm border border-gray-200 rounded-[10px] outline-none focus:border-blue-600 focus:ring-[3px] focus:ring-blue-600/10 transition"
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleQuery();
+                if (e.key === "Enter") handleQuery(false);
               }}
             />
           </div>
@@ -410,12 +395,20 @@ export default function Home() {
 
           {/* Query Button */}
           <button
-            onClick={handleQuery}
+            onClick={() => handleQuery(false)}
             disabled={loading}
             className="h-10 px-[18px] bg-blue-600 text-white text-sm font-semibold rounded-[10px] whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed hover:bg-blue-700 transition inline-flex items-center gap-1.5"
           >
             <Search className="w-4 h-4" />
             {loading ? "查询中..." : "查询"}
+          </button>
+
+          <button
+            onClick={() => handleQuery(true)}
+            disabled={loading}
+            className="h-10 px-[18px] bg-amber-50 text-amber-700 text-sm font-semibold rounded-[10px] whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed hover:bg-amber-100 transition"
+          >
+            查询90天前历史
           </button>
 
           {/* Reset Button */}
@@ -522,6 +515,10 @@ export default function Home() {
 
       {/* Summary Grid */}
       {result && (
+        <>
+        <div className="mb-3 px-4 py-3 rounded-xl bg-blue-50 text-blue-700 text-sm">
+          数据来源：{result.dataSource === "cache" ? "云端缓存" : "数仓实时查询"} · {result.rangeLabel}
+        </div>
         <section className="grid grid-cols-2 md:grid-cols-6 gap-3.5 mb-5">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">查询 UID</div>
@@ -566,6 +563,7 @@ export default function Home() {
             <div className="text-[22px] font-bold">{result.latestDt}</div>
           </div>
         </section>
+        </>
       )}
 
       {/* Result Table */}

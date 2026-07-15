@@ -21,12 +21,8 @@ interface CsvRow {
   channel: string;
   dt: string;
   uid: string;
-  phone: string;
-  leadType: string;
-  userTypeOrChannel: string;
-  grade: string;
   rank: string;
-  extraInfo: string;
+  detail: string;
 }
 
 function escapeCsvValue(value: string): string {
@@ -39,12 +35,8 @@ function buildCsv(rows: CsvRow[]): string {
     "渠道",
     "分配日期",
     "用户UID",
-    "手机号",
-    "线索类型",
-    "用户类型/线索渠道",
-    "年级",
     "排名",
-    "扩展信息",
+    "用户类型/线索渠道/业务线类型",
   ];
 
   const lines = [
@@ -54,12 +46,8 @@ function buildCsv(rows: CsvRow[]): string {
         escapeCsvValue(row.channel),
         escapeCsvValue(row.dt),
         escapeCsvValue(row.uid),
-        escapeCsvValue(row.phone),
-        escapeCsvValue(row.leadType),
-        escapeCsvValue(row.userTypeOrChannel),
-        escapeCsvValue(row.grade),
         escapeCsvValue(row.rank),
-        escapeCsvValue(row.extraInfo),
+        escapeCsvValue(row.detail),
       ].join(",")
     ),
   ];
@@ -225,12 +213,8 @@ export async function POST(request: Request) {
           channel: "BPO",
           dt: r.dt,
           uid: r.userid,
-          phone: r.phone,
-          leadType: r.leadType,
-          userTypeOrChannel: r.userType,
-          grade: r.grade,
           rank: String(r.rank),
-          extraInfo: r.extraInfo,
+          detail: r.userType,
         });
       });
     }
@@ -241,12 +225,8 @@ export async function POST(request: Request) {
           channel: "TMK",
           dt: r.dt,
           uid: r.user_id,
-          phone: "",
-          leadType: r.hunt_lead_type,
-          userTypeOrChannel: r.lead_channel,
-          grade: r.grade,
           rank: r.queue_rnk,
-          extraInfo: "",
+          detail: r.lead_channel,
         });
       });
     }
@@ -257,12 +237,8 @@ export async function POST(request: Request) {
           channel: "CC",
           dt: r.dt,
           uid: r.user_id,
-          phone: "",
-          leadType: r.leadtype,
-          userTypeOrChannel: r.business_line_type,
-          grade: r.grade,
           rank: r.final_rank,
-          extraInfo: `predict_rank=${r.predict_rank}`,
+          detail: r.business_line_type,
         });
       });
     }

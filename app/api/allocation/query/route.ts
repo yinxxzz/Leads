@@ -9,12 +9,13 @@ interface QueryRequest {
   channel: Channel;
   dateMode: DateMode;
   date?: string;
+  includeHistory?: boolean;
 }
 
 export async function POST(request: Request) {
   try {
     const body: QueryRequest = await request.json();
-    const { uid, channel, dateMode, date } = body;
+    const { uid, channel, dateMode, date, includeHistory } = body;
 
     // Parameter validation
     if (!uid || !uid.trim()) {
@@ -60,7 +61,10 @@ export async function POST(request: Request) {
       }
     }
 
-    const { bpoRecords, tmkRecords, ccRecords } = await queryAllocationRecords({
+    const queryFn = includeHistory
+      ? (await import("../data-source")).queryAllocationRecordsFromSource
+      : queryAllocationRecords;
+    const { bpoRecords, tmkRecords, ccRecords } = await queryFn({
       uid: uid.trim(),
       channel,
       dateMode,
@@ -92,6 +96,8 @@ export async function POST(request: Request) {
       bpoRecords,
       tmkRecords,
       ccRecords,
+      dataSource: includeHistory ? "warehouse" : "cache",
+      rangeLabel: includeHistory ? "数仓全部历史" : "最近90天缓存",
     });
   } catch (error) {
     return NextResponse.json(

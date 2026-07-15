@@ -4,31 +4,31 @@
 export interface BpoRecord {
   dt: string;
   userid: string;
-  phone: string;
-  leadType: string;
   userType: string;
-  grade: string;
   rank: number;
-  extraInfo: string;
+  phone?: string;
+  leadType?: string;
+  grade?: string;
+  extraInfo?: string;
 }
 
 export interface TmkRecord {
   dt: string;
   user_id: string;
   lead_channel: string;
-  hunt_lead_type: string;
-  grade: string;
   queue_rnk: string;
+  hunt_lead_type?: string;
+  grade?: string;
 }
 
 export interface CcRecord {
   dt: string;
   user_id: string;
-  leadtype: string;
-  grade: string;
   final_rank: string;
-  predict_rank: string;
   business_line_type: string;
+  leadtype?: string;
+  grade?: string;
+  predict_rank?: string;
 }
 
 export const mockBpoRecords: BpoRecord[] = [
