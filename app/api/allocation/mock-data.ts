@@ -10,6 +10,13 @@ export interface BpoRecord {
   leadType?: string;
   grade?: string;
   extraInfo?: string;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 export interface TmkRecord {
@@ -19,6 +26,13 @@ export interface TmkRecord {
   queue_rnk: string;
   hunt_lead_type?: string;
   grade?: string;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 export interface CcRecord {
@@ -29,6 +43,13 @@ export interface CcRecord {
   leadtype?: string;
   grade?: string;
   predict_rank?: string;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 export const mockBpoRecords: BpoRecord[] = [

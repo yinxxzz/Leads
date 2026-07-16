@@ -101,22 +101,72 @@ function buildDateCondition(params: AllocationQueryParams, dateExpression = "dt"
   return `  and ${dateExpression} >= '${params.startDate}' and ${dateExpression} <= '${params.endDate}'`;
 }
 
+function shiftIsoDate(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function buildShiftedDateCondition(
+  params: AllocationQueryParams,
+  dateExpression: string,
+  days: number,
+): string {
+  if (params.dateMode === "specific" && params.date) {
+    return `  and ${dateExpression} = '${shiftIsoDate(params.date, days)}'`;
+  }
+  if (params.dateMode === "range" && params.startDate && params.endDate) {
+    return `  and ${dateExpression} >= '${shiftIsoDate(params.startDate, days)}' and ${dateExpression} <= '${shiftIsoDate(params.endDate, days)}'`;
+  }
+  return "";
+}
+
 export function buildBpoSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
   const bpoAssignDateExpression = "date_add(to_date(dt), 1)";
   const dateCondition = buildDateCondition(params, bpoAssignDateExpression);
 
   return `
-select
-    ${bpoAssignDateExpression} as dt
-    ,user_id as userid
-    ,case when channel='百科存量' then 'pediaStock' else channel end as userType
-    ,row_number() over(partition by ${bpoAssignDateExpression} order by rand(2026)) as rank
-from dw_conan_ads.ads_eng_tmk_hunt_side_user_detail_di_no_sensitive_view
-where call_user_type != '0'
+WITH pool AS (
+  SELECT
+      ${bpoAssignDateExpression} AS dt
+      ,user_id AS userid
+      ,CASE WHEN channel='百科存量' THEN 'pediaStock' ELSE channel END AS userType
+      ,row_number() OVER(PARTITION BY ${bpoAssignDateExpression} ORDER BY rand(2026)) AS rank
+  FROM dw_conan_ads.ads_eng_tmk_hunt_side_user_detail_di_no_sensitive_view
+  WHERE call_user_type != '0'
 ${uidCondition}
 ${dateCondition}
-order by ${bpoAssignDateExpression} desc
+), assignment_base AS (
+  SELECT
+      user_id,dt AS assign_dt,assign_ldap,first_opp_start_time
+      ,is_manual_assigned,is_dialed,is_connected,call_cnt,first_call_start_time
+  FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
+  WHERE feed_lead_source='side'
+${params.uid ? `  AND user_id='${params.uid}'` : ""}
+${buildDateCondition(params)}
+), assignment_summary AS (
+  SELECT
+      a.user_id, a.assign_dt
+      ,max(a.is_manual_assigned) AS has_actual_assignment
+      ,concat_ws(',', sort_array(collect_set(a.assign_ldap))) AS sales_ldap
+      ,min(a.first_opp_start_time) AS assigned_at
+      ,sum(a.call_cnt) AS call_count
+      ,max(a.is_connected) AS has_connected
+      ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
+  FROM assignment_base a
+  GROUP BY a.user_id, a.assign_dt
+)
+SELECT p.*
+    ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
+    ,a.sales_ldap, a.assigned_at
+    ,CASE WHEN a.call_count > 0 THEN 1 ELSE 0 END AS has_called
+    ,coalesce(a.has_connected,0) AS has_connected
+    ,coalesce(a.call_count,0) AS call_count
+    ,a.latest_touch_at
+FROM pool p
+LEFT JOIN assignment_summary a ON p.userid=a.user_id AND p.dt=a.assign_dt
+ORDER BY p.dt DESC, p.rank
 `.trim();
 }
 
@@ -125,37 +175,100 @@ export function buildTmkSql(params: AllocationQueryParams): string {
   const dateCondition = buildDateCondition(params);
 
   return `
-SELECT
-    dt
-    ,user_id
-    ,lead_channel
-    ,queue_rnk
-FROM dw_ads.ads_eng_tmk_hunt_all_user_detail_with_grade_di_no_sensitive_view
-WHERE 1 = 1
+WITH pool AS (
+  SELECT dt,user_id,lead_channel,queue_rnk
+  FROM dw_ads.ads_eng_tmk_hunt_all_user_detail_with_grade_di_no_sensitive_view
+  WHERE 1=1
 ${uidCondition}
 ${dateCondition}
-ORDER BY
-    dt DESC
-    ,CAST(queue_rnk AS BIGINT)
+), assignment_base AS (
+  SELECT user_id,dt AS assign_dt,assign_ldap,first_opp_start_time
+      ,is_manual_assigned,is_dialed,is_connected,call_cnt,first_call_start_time
+  FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
+  WHERE feed_lead_source='internal'
+${params.uid ? `  AND user_id='${params.uid}'` : ""}
+${buildDateCondition(params)}
+), assignment_summary AS (
+  SELECT a.user_id,a.assign_dt
+      ,max(a.is_manual_assigned) AS has_actual_assignment
+      ,concat_ws(',',sort_array(collect_set(a.assign_ldap))) AS sales_ldap
+      ,min(a.first_opp_start_time) AS assigned_at
+      ,sum(a.call_cnt) AS call_count
+      ,max(a.is_connected) AS has_connected
+      ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
+  FROM assignment_base a
+  GROUP BY a.user_id,a.assign_dt
+)
+SELECT p.*
+    ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
+    ,a.sales_ldap,a.assigned_at
+    ,CASE WHEN a.call_count > 0 THEN 1 ELSE 0 END AS has_called
+    ,coalesce(a.has_connected,0) AS has_connected
+    ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
+FROM pool p
+LEFT JOIN assignment_summary a ON p.user_id=a.user_id AND p.dt=a.assign_dt
+ORDER BY p.dt DESC,CAST(p.queue_rnk AS BIGINT)
 `.trim();
 }
 
 export function buildCcSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
+  const assignmentUidCondition = params.uid ? `  and u.userid = '${params.uid}'` : "";
   const dateCondition = buildDateCondition(params);
+  const assignmentDateCondition = buildShiftedDateCondition(params, "to_date(from_unixtime(CAST(o.starttime AS BIGINT) / 1000))", 1);
+  const callDateCondition = params.dateMode === "specific" && params.date
+    ? `  and to_date(touch_dt) >= '${shiftIsoDate(params.date, 1)}'`
+    : params.dateMode === "range" && params.startDate
+      ? `  and to_date(touch_dt) >= '${shiftIsoDate(params.startDate, 1)}'`
+      : "";
 
   return `
-SELECT
-    dt
-    ,user_id
-    ,final_rank
-    ,business_line_type
-FROM dw_ads.ads_conan_user_cc_total_all_age_with_grade_di
-WHERE 1 = 1
-  AND CAST(final_rank AS BIGINT) <= 7000
+WITH pool AS (
+  SELECT dt,user_id,final_rank,business_line_type
+  FROM dw_ads.ads_conan_user_cc_total_all_age_with_grade_di
+  WHERE CAST(final_rank AS BIGINT) <= 7000
 ${uidCondition}
 ${dateCondition}
-ORDER BY dt DESC, CAST(final_rank AS BIGINT)
+), assignment_base AS (
+  SELECT u.userid AS user_id,o.leadid,o.ldap
+      ,to_date(from_unixtime(CAST(o.starttime AS BIGINT) / 1000)) AS assign_dt
+      ,from_unixtime(CAST(o.starttime AS BIGINT) / 1000) AS assigned_at
+      ,CASE WHEN o.endtime IS NULL OR o.endtime IN ('','0') THEN NULL
+            ELSE from_unixtime(CAST(o.endtime AS BIGINT) / 1000) END AS assignment_end_at
+  FROM dw_ods.ods_conan_mentor_tmk_opportunity_da o
+  JOIN dw_ods.ods_conan_mentor_tmk_lead_user_da u ON o.leadid=u.leadid
+  WHERE o.dt=(SELECT max(dt) FROM dw_ods.ods_conan_mentor_tmk_opportunity_da)
+    AND u.dt=(SELECT max(dt) FROM dw_ods.ods_conan_mentor_tmk_lead_user_da)
+    AND o.leadtype='20' AND o.test='0' AND o.canceled='0'
+${assignmentUidCondition}
+${assignmentDateCondition}
+), assignment_summary AS (
+  SELECT a.user_id,a.assign_dt
+      ,concat_ws(',',sort_array(collect_set(a.ldap))) AS sales_ldap
+      ,min(a.assigned_at) AS assigned_at
+      ,count(DISTINCT c.callid) AS call_count
+      ,max(CASE WHEN c.callendstatus='1' THEN 1 ELSE 0 END) AS has_connected
+      ,max(c.touch_dt) AS latest_touch_at
+  FROM assignment_base a
+  LEFT JOIN (
+    SELECT leadid,ldap,callid,callendstatus,touch_dt
+    FROM dw_dwd.dwd_conan_tmk_lead_call_record_da
+    WHERE dt=(SELECT max(dt) FROM dw_dwd.dwd_conan_tmk_lead_call_record_da)
+${callDateCondition}
+  ) c ON a.leadid=c.leadid AND a.ldap=c.ldap
+   AND to_timestamp(c.touch_dt) >= to_timestamp(a.assigned_at)
+   AND (a.assignment_end_at IS NULL OR to_timestamp(c.touch_dt) <= to_timestamp(a.assignment_end_at))
+  GROUP BY a.user_id,a.assign_dt
+)
+SELECT p.*
+    ,CASE WHEN a.user_id IS NOT NULL THEN 1 ELSE 0 END AS has_actual_assignment
+    ,a.sales_ldap,a.assigned_at
+    ,CASE WHEN a.call_count > 0 THEN 1 ELSE 0 END AS has_called
+    ,coalesce(a.has_connected,0) AS has_connected
+    ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
+FROM pool p
+LEFT JOIN assignment_summary a ON p.user_id=a.user_id AND date_add(to_date(p.dt),1)=a.assign_dt
+ORDER BY p.dt DESC,CAST(p.final_rank AS BIGINT)
 `.trim();
 }
 
