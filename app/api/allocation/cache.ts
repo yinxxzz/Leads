@@ -91,14 +91,18 @@ async function insertRows(client: PoolClient, rows: CacheRow[]): Promise<void> {
   }
 }
 
-export async function replaceAllocationCacheDate(date: string, result: AllocationQueryResult) {
+export async function replaceAllocationCacheDate(
+  date: string,
+  result: AllocationQueryResult,
+  channels: CacheChannel[] = ["bpo", "tmk", "cc"],
+) {
   const pool = getCachePool();
   const client = await pool.connect();
   const rows = toCacheRows(result);
   const counts = { bpo: result.bpoRecords.length, tmk: result.tmkRecords.length, cc: result.ccRecords.length };
   try {
     await client.query("BEGIN");
-    for (const channel of ["bpo", "tmk", "cc"] as CacheChannel[]) {
+    for (const channel of channels) {
       await client.query("DELETE FROM allocation_record_cache WHERE channel=$1 AND dt=$2::date", [channel, date]);
       await insertRows(client, rows.filter((row) => row.channel === channel));
       await client.query(`INSERT INTO allocation_cache_refreshes(channel,dt,status,row_count,refreshed_at,error_message)
@@ -107,7 +111,10 @@ export async function replaceAllocationCacheDate(date: string, result: Allocatio
       [channel, date, counts[channel]]);
     }
     await client.query("COMMIT");
-    return { total: rows.length, counts };
+    return {
+      total: channels.reduce((sum, channel) => sum + counts[channel], 0),
+      counts: Object.fromEntries(channels.map((channel) => [channel, counts[channel]])),
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

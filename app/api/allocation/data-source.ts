@@ -342,13 +342,18 @@ async function executeBigDataMcp<T>(sql: string, context: QueryContext): Promise
   }
 }
 
-async function executeBigDataMcpDownloadUrl(sql: string, context: QueryContext): Promise<string> {
+async function executeBigDataMcpDownloadUrl(
+  sql: string,
+  context: QueryContext,
+  timeoutOverrideSeconds?: number,
+): Promise<string> {
   const apiUrl = process.env.ALLOCATION_BIGDATA_MCP_URL;
   if (!apiUrl) {
     throw new Error("未配置 ALLOCATION_BIGDATA_MCP_URL");
   }
 
-  const timeoutSeconds = Number(process.env.ALLOCATION_BIGDATA_MCP_TIMEOUT_SECONDS || 60);
+  const timeoutSeconds = timeoutOverrideSeconds
+    || Number(process.env.ALLOCATION_BIGDATA_MCP_TIMEOUT_SECONDS || 60);
 
   const mcpHeaders = {
     "Content-Type": "application/json",
@@ -508,7 +513,12 @@ export async function getExportDownloadUrl(sql: string, context: QueryContext): 
 }
 
 async function executeBigDataMcpCsv<T>(sql: string, context: QueryContext): Promise<T[]> {
-  const downloadUrl = await executeBigDataMcpDownloadUrl(sql, context);
+  const cacheTimeout = Number(process.env.ALLOCATION_CACHE_QUERY_TIMEOUT_SECONDS || 600);
+  const downloadUrl = await executeBigDataMcpDownloadUrl(
+    sql,
+    context,
+    Number.isFinite(cacheTimeout) && cacheTimeout > 0 ? cacheTimeout : 600,
+  );
   const response = await fetch(downloadUrl);
   if (!response.ok) throw new Error(`完整CSV下载失败：HTTP ${response.status}`);
   const csv = await response.text();
@@ -526,17 +536,18 @@ export async function queryAllocationRecordsForCache(
   if (getQueryProvider() !== "bigdata-mcp") {
     return queryAllocationRecordsFromSource(params);
   }
-  const [bpoRecords, tmkRecords, ccRecords] = await Promise.all([
-    executeBigDataMcpCsv<BpoRecord>(buildBpoSql(params), {
+  const bpoRecords = params.channel === "all" || params.channel === "bpo"
+    ? await executeBigDataMcpCsv<BpoRecord>(buildBpoSql(params), {
       catalog: "hive_f04", database: "dw_conan_ads", name: "allocation_cache_bpo",
-    }),
-    executeBigDataMcpCsv<TmkRecord>(buildTmkSql(params), {
+    }) : [];
+  const tmkRecords = params.channel === "all" || params.channel === "tmk"
+    ? await executeBigDataMcpCsv<TmkRecord>(buildTmkSql(params), {
       catalog: "hive_f04", database: "dw_ads", name: "allocation_cache_tmk",
-    }),
-    executeBigDataMcpCsv<CcRecord>(buildCcSql(params), {
+    }) : [];
+  const ccRecords = params.channel === "all" || params.channel === "cc"
+    ? await executeBigDataMcpCsv<CcRecord>(buildCcSql(params), {
       catalog: "hive_f04", database: "dw_ads", name: "allocation_cache_cc",
-    }),
-  ]);
+    }) : [];
   return { bpoRecords, tmkRecords, ccRecords };
 }
 
