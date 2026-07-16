@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { cleanupExpiredAllocationCache, replaceAllocationCacheDate } from "../../cache";
 import { queryAllocationRecordsForCache } from "../../data-source";
+import type { Channel } from "../../data-source";
+
+type RefreshChannel = Exclude<Channel, "all">;
 
 function yesterdayInShanghai(): string {
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -27,7 +30,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json().catch(() => ({})) as { date?: string; startDate?: string; endDate?: string };
+    const body = await request.json().catch(() => ({})) as {
+      date?: string;
+      startDate?: string;
+      endDate?: string;
+      channel?: Channel;
+    };
     const start = body.startDate || body.date || yesterdayInShanghai();
     const end = body.endDate || body.date || start;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || start > end) {
@@ -37,15 +45,28 @@ export async function POST(request: Request) {
     if (dates.length > 31) {
       return NextResponse.json({ error: "单次最多刷新 31 天" }, { status: 400 });
     }
+    const channel = body.channel || "all";
+    if (!["all", "bpo", "tmk", "cc"].includes(channel)) {
+      return NextResponse.json({ error: "channel 只能是 all / bpo / tmk / cc" }, { status: 400 });
+    }
+    const channels: RefreshChannel[] = channel === "all"
+      ? ["bpo", "tmk", "cc"]
+      : [channel];
 
     const refreshed = [];
     for (const date of dates) {
-      const records = await queryAllocationRecordsForCache({
-        channel: "all",
-        dateMode: "specific",
-        date,
-      });
-      refreshed.push({ date, ...await replaceAllocationCacheDate(date, records) });
+      for (const currentChannel of channels) {
+        const records = await queryAllocationRecordsForCache({
+          channel: currentChannel,
+          dateMode: "specific",
+          date,
+        });
+        refreshed.push({
+          date,
+          channel: currentChannel,
+          ...await replaceAllocationCacheDate(date, records, [currentChannel]),
+        });
+      }
     }
     const cleanup = await cleanupExpiredAllocationCache();
     return NextResponse.json({ success: true, refreshed, cleanup });

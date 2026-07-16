@@ -9,6 +9,7 @@
     "lint": "next lint",
     "db:init": "tsx --env-file=.env.local scripts/init-db.ts",
     "cache:import": "tsx --env-file=.env.local scripts/import-cache-csv.ts",
+    "cache:refresh": "bash scripts/refresh-cache-channels.sh",
     "publish": "node scripts/publish.js"
   },
   "dependencies": {
