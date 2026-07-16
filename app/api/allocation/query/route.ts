@@ -81,12 +81,21 @@ export async function POST(request: Request) {
       .sort()
       .reverse();
 
-    const hasAllocation = bpoRecords.length > 0 || tmkRecords.length > 0 || ccRecords.length > 0;
+    const allRecords = [...bpoRecords, ...tmkRecords, ...ccRecords];
+    const hasPoolEntry = allRecords.length > 0;
+    const truthy = (value: unknown) => value === true || value === 1 || value === "1" || value === "true";
+    const hasActualAssignment = allRecords.some((record) => truthy(record.has_actual_assignment));
+    const hasCalled = allRecords.some((record) => truthy(record.has_called));
+    const hasConnected = allRecords.some((record) => truthy(record.has_connected));
     const latestDt = allDates[0] || "-";
 
     return NextResponse.json({
       uid: uid.trim(),
-      hasAllocation,
+      hasAllocation: hasPoolEntry,
+      hasPoolEntry,
+      hasActualAssignment,
+      hasCalled,
+      hasConnected,
       latestDt,
       summary: {
         bpoCount: bpoRecords.length,

@@ -2,7 +2,29 @@ import type { Pool, PoolClient } from "pg";
 import type { AllocationQueryParams, AllocationQueryResult, Channel } from "./data-source";
 
 type CacheChannel = Exclude<Channel, "all">;
-interface CacheRow { channel: CacheChannel; dt: string; user_id: string; rank: number; detail: string | null }
+interface CacheRow {
+  channel: CacheChannel;
+  dt: string;
+  user_id: string;
+  rank: number;
+  detail: string | null;
+  has_actual_assignment: boolean;
+  sales_ldap: string | null;
+  assigned_at: string | null;
+  has_called: boolean;
+  has_connected: boolean;
+  call_count: number;
+  latest_touch_at: string | null;
+}
+
+function asBoolean(value: boolean | string | number | undefined): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+function nullableString(value: string | undefined): string | null {
+  if (!value || value === "@pipe_null@" || value.toLowerCase() === "null") return null;
+  return value;
+}
 
 let cachePool: Pool | null = null;
 function getCachePool(): Pool {
@@ -30,12 +52,12 @@ function shanghaiDate(offsetDays = 0): string {
   date.setUTCDate(date.getUTCDate() + offsetDays);
   return date.toISOString().slice(0, 10);
 }
-function cacheCutoffDate(): string { return shanghaiDate(-cacheRetentionDays()); }
+function cacheCutoffDate(): string { return shanghaiDate(-(cacheRetentionDays() - 1)); }
 function selectedChannels(channel: Channel): CacheChannel[] { return channel === "all" ? ["bpo", "tmk", "cc"] : [channel]; }
 function getDateBounds(params: AllocationQueryParams): { start?: string; end?: string } {
   if (params.dateMode === "specific") return { start: params.date, end: params.date };
   if (params.dateMode === "range") return { start: params.startDate, end: params.endDate };
-  return { start: cacheCutoffDate(), end: shanghaiDate(-1) };
+  return { start: cacheCutoffDate(), end: shanghaiDate() };
 }
 
 export async function queryCachedAllocationRecords(params: AllocationQueryParams): Promise<AllocationQueryResult | null> {
@@ -53,7 +75,9 @@ export async function queryCachedAllocationRecords(params: AllocationQueryParams
   if (channels.some((channel) => !covered.has(channel))) return null;
 
   const result = await pool.query<CacheRow>(`
-    SELECT channel,dt,user_id,rank,detail FROM allocation_record_cache
+    SELECT channel,dt,user_id,rank,detail,has_actual_assignment,sales_ldap,
+      assigned_at,has_called,has_connected,call_count,latest_touch_at
+    FROM allocation_record_cache
     WHERE channel = ANY($1)
       AND ($2::text IS NULL OR user_id=$2)
       AND ($3::date IS NULL OR dt >= $3::date)
@@ -63,18 +87,27 @@ export async function queryCachedAllocationRecords(params: AllocationQueryParams
   `, [channels, params.uid || null, start || null, end || null]);
   const output: AllocationQueryResult = { bpoRecords: [], tmkRecords: [], ccRecords: [] };
   for (const row of result.rows) {
-    if (row.channel === "bpo") output.bpoRecords.push({ dt: row.dt, userid: row.user_id, rank: row.rank, userType: row.detail || "" });
-    else if (row.channel === "tmk") output.tmkRecords.push({ dt: row.dt, user_id: row.user_id, queue_rnk: String(row.rank), lead_channel: row.detail || "" });
-    else output.ccRecords.push({ dt: row.dt, user_id: row.user_id, final_rank: String(row.rank), business_line_type: row.detail || "" });
+    const assignment = {
+      has_actual_assignment: row.has_actual_assignment,
+      sales_ldap: row.sales_ldap || "",
+      assigned_at: row.assigned_at || "",
+      has_called: row.has_called,
+      has_connected: row.has_connected,
+      call_count: row.call_count,
+      latest_touch_at: row.latest_touch_at || "",
+    };
+    if (row.channel === "bpo") output.bpoRecords.push({ dt: row.dt, userid: row.user_id, rank: row.rank, userType: row.detail || "", ...assignment });
+    else if (row.channel === "tmk") output.tmkRecords.push({ dt: row.dt, user_id: row.user_id, queue_rnk: String(row.rank), lead_channel: row.detail || "", ...assignment });
+    else output.ccRecords.push({ dt: row.dt, user_id: row.user_id, final_rank: String(row.rank), business_line_type: row.detail || "", ...assignment });
   }
   return output;
 }
 
 function toCacheRows(result: AllocationQueryResult): CacheRow[] {
   return [
-    ...result.bpoRecords.map((r): CacheRow => ({ channel: "bpo", dt: r.dt, user_id: String(r.userid), rank: Number(r.rank), detail: r.userType || null })),
-    ...result.tmkRecords.map((r): CacheRow => ({ channel: "tmk", dt: r.dt, user_id: String(r.user_id), rank: Number(r.queue_rnk), detail: r.lead_channel || null })),
-    ...result.ccRecords.map((r): CacheRow => ({ channel: "cc", dt: r.dt, user_id: String(r.user_id), rank: Number(r.final_rank), detail: r.business_line_type || null })),
+    ...result.bpoRecords.map((r): CacheRow => ({ channel: "bpo", dt: r.dt, user_id: String(r.userid), rank: Number(r.rank), detail: r.userType || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
+    ...result.tmkRecords.map((r): CacheRow => ({ channel: "tmk", dt: r.dt, user_id: String(r.user_id), rank: Number(r.queue_rnk), detail: r.lead_channel || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
+    ...result.ccRecords.map((r): CacheRow => ({ channel: "cc", dt: r.dt, user_id: String(r.user_id), rank: Number(r.final_rank), detail: r.business_line_type || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
   ];
 }
 
@@ -83,11 +116,16 @@ async function insertRows(client: PoolClient, rows: CacheRow[]): Promise<void> {
     const batch = rows.slice(offset, offset + 1000);
     const values: unknown[] = [];
     const placeholders = batch.map((row, index) => {
-      const base = index * 5;
-      values.push(row.channel, row.dt, row.user_id, row.rank, row.detail);
-      return `($${base + 1},$${base + 2}::date,$${base + 3},$${base + 4},$${base + 5})`;
+      const base = index * 12;
+      values.push(row.channel, row.dt, row.user_id, row.rank, row.detail,
+        row.has_actual_assignment, row.sales_ldap, row.assigned_at, row.has_called,
+        row.has_connected, row.call_count, row.latest_touch_at);
+      return `($${base + 1},$${base + 2}::date,$${base + 3},$${base + 4},$${base + 5},$${base + 6},$${base + 7},$${base + 8}::timestamptz,$${base + 9},$${base + 10},$${base + 11},$${base + 12}::timestamptz)`;
     });
-    await client.query(`INSERT INTO allocation_record_cache(channel,dt,user_id,rank,detail) VALUES ${placeholders.join(",")}`, values);
+    await client.query(`INSERT INTO allocation_record_cache(
+      channel,dt,user_id,rank,detail,has_actual_assignment,sales_ldap,assigned_at,
+      has_called,has_connected,call_count,latest_touch_at
+    ) VALUES ${placeholders.join(",")}`, values);
   }
 }
 

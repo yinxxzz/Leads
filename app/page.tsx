@@ -9,6 +9,13 @@ interface BpoRecord {
   userid: string;
   userType: string;
   rank: number;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 interface TmkRecord {
@@ -16,6 +23,13 @@ interface TmkRecord {
   user_id: string;
   lead_channel: string;
   queue_rnk: string;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 interface CcRecord {
@@ -23,11 +37,22 @@ interface CcRecord {
   user_id: string;
   final_rank: string;
   business_line_type: string;
+  has_actual_assignment?: boolean | string | number;
+  sales_ldap?: string;
+  assigned_at?: string;
+  has_called?: boolean | string | number;
+  has_connected?: boolean | string | number;
+  call_count?: number | string;
+  latest_touch_at?: string;
 }
 
 interface QueryResult {
   uid: string;
   hasAllocation: boolean;
+  hasPoolEntry: boolean;
+  hasActualAssignment: boolean;
+  hasCalled: boolean;
+  hasConnected: boolean;
   latestDt: string;
   summary: {
     bpoCount: number;
@@ -43,6 +68,13 @@ interface QueryResult {
 
 type Channel = "all" | "bpo" | "tmk" | "cc";
 type Tab = "bpo" | "tmk" | "cc";
+
+function displayCell(key: string, value: unknown): string {
+  if (["has_actual_assignment", "has_called", "has_connected"].includes(key)) {
+    return value === true || value === 1 || value === "1" || value === "true" ? "是" : "否";
+  }
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear();
@@ -315,26 +347,47 @@ export default function Home() {
 
   // BPO columns
   const bpoColumns: [string, string][] = [
-    ["dt", "分配日期"],
+    ["dt", "商分入池日期"],
     ["userid", "用户 UID"],
     ["userType", "用户类型"],
     ["rank", "排名"],
+    ["has_actual_assignment", "实际分配"],
+    ["sales_ldap", "分配销售"],
+    ["assigned_at", "实际分配时间"],
+    ["has_called", "是否拨打"],
+    ["has_connected", "是否接通"],
+    ["call_count", "拨打次数"],
+    ["latest_touch_at", "最近触达时间"],
   ];
 
   // TMK columns
   const tmkColumns: [string, string][] = [
-    ["dt", "分配日期"],
+    ["dt", "商分入池日期"],
     ["user_id", "用户 UID"],
     ["lead_channel", "线索渠道"],
     ["queue_rnk", "队列排名"],
+    ["has_actual_assignment", "实际分配"],
+    ["sales_ldap", "分配销售"],
+    ["assigned_at", "实际分配时间"],
+    ["has_called", "是否拨打"],
+    ["has_connected", "是否接通"],
+    ["call_count", "拨打次数"],
+    ["latest_touch_at", "最近触达时间"],
   ];
 
   // CC columns
   const ccColumns: [string, string][] = [
-    ["dt", "分配日期"],
+    ["dt", "商分入池日期"],
     ["user_id", "用户 UID"],
     ["final_rank", "最终排名"],
     ["business_line_type", "业务线类型"],
+    ["has_actual_assignment", "实际分配"],
+    ["sales_ldap", "分配销售"],
+    ["assigned_at", "实际分配时间"],
+    ["has_called", "是否拨打"],
+    ["has_connected", "是否接通"],
+    ["call_count", "拨打次数"],
+    ["latest_touch_at", "最近触达时间"],
   ];
 
   return (
@@ -346,7 +399,7 @@ export default function Home() {
         </h1>
         <p className="text-sm text-gray-500">
           输入用户 UID，查询该用户在 BPO / TMK / CC
-          渠道下是否进入分配池，以及对应分配日期、渠道、排名等信息。
+          渠道下是否进入商分池、是否实际分给销售，以及是否拨打和接通。
         </p>
       </section>
 
@@ -519,26 +572,34 @@ export default function Home() {
         <div className="mb-3 px-4 py-3 rounded-xl bg-blue-50 text-blue-700 text-sm">
           数据来源：{result.dataSource === "cache" ? "云端缓存" : "数仓实时查询"} · {result.rangeLabel}
         </div>
-        <section className="grid grid-cols-2 md:grid-cols-6 gap-3.5 mb-5">
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-5">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">查询 UID</div>
             <div className="text-[22px] font-bold">{result.uid}</div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">
-              是否有分配记录
+              是否进入商分池
             </div>
             <div>
               <span
                 className={`inline-flex items-center h-7 px-2.5 rounded-full text-[13px] font-semibold ${
-                  result.hasAllocation
+                  result.hasPoolEntry
                     ? "text-green-600 bg-green-50"
                     : "text-gray-500 bg-gray-100"
                 }`}
               >
-                {result.hasAllocation ? "有" : "无"}
+                {result.hasPoolEntry ? "是" : "否"}
               </span>
             </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
+            <div className="text-[13px] text-gray-500 mb-2">是否实际分配销售</div>
+            <div className="text-[22px] font-bold">{result.hasActualAssignment ? "是" : "否"}</div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
+            <div className="text-[13px] text-gray-500 mb-2">是否拨打 / 接通</div>
+            <div className="text-[22px] font-bold">{result.hasCalled ? "已拨打" : "未拨打"} / {result.hasConnected ? "已接通" : "未接通"}</div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
             <div className="text-[13px] text-gray-500 mb-2">BPO 记录数</div>
@@ -559,7 +620,7 @@ export default function Home() {
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
-            <div className="text-[13px] text-gray-500 mb-2">最近分配日期</div>
+            <div className="text-[13px] text-gray-500 mb-2">最近商分入池日期</div>
             <div className="text-[22px] font-bold">{result.latestDt}</div>
           </div>
         </section>
@@ -632,11 +693,7 @@ export default function Home() {
                           key={key}
                           className="border-b border-gray-200 px-2.5 py-3 text-gray-900 whitespace-nowrap"
                         >
-                          {String(
-                            (record as unknown as Record<string, unknown>)[
-                              key
-                            ] ?? "-"
-                          )}
+                          {displayCell(key, (record as unknown as Record<string, unknown>)[key])}
                         </td>
                       ))}
                     </tr>
@@ -667,11 +724,7 @@ export default function Home() {
                           key={key}
                           className="border-b border-gray-200 px-2.5 py-3 text-gray-900 whitespace-nowrap"
                         >
-                          {String(
-                            (record as unknown as Record<string, unknown>)[
-                              key
-                            ] ?? "-"
-                          )}
+                          {displayCell(key, (record as unknown as Record<string, unknown>)[key])}
                         </td>
                       ))}
                     </tr>
@@ -702,11 +755,7 @@ export default function Home() {
                           key={key}
                           className="border-b border-gray-200 px-2.5 py-3 text-gray-900 whitespace-nowrap"
                         >
-                          {String(
-                            (record as unknown as Record<string, unknown>)[
-                              key
-                            ] ?? "-"
-                          )}
+                          {displayCell(key, (record as unknown as Record<string, unknown>)[key])}
                         </td>
                       ))}
                     </tr>

@@ -8,8 +8,11 @@
     "start": "next start -p 8000",
     "lint": "next lint",
     "db:init": "tsx --env-file=.env.local scripts/init-db.ts",
+    "db:migrate:assignment-contact": "tsx --env-file=.env.local scripts/run-assignment-contact-migration.ts",
     "cache:import": "tsx --env-file=.env.local scripts/import-cache-csv.ts",
     "cache:refresh": "bash scripts/refresh-cache-channels.sh",
+    "cache:refresh:rolling": "bash scripts/refresh-recent-cache.sh",
+    "cache:backfill": "bash scripts/backfill-cache.sh",
     "publish": "node scripts/publish.js"
   },
   "dependencies": {

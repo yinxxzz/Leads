@@ -4,6 +4,13 @@ create table if not exists public.allocation_record_cache (
   user_id text not null,
   rank integer not null,
   detail text,
+  has_actual_assignment boolean not null default false,
+  sales_ldap text,
+  assigned_at timestamptz,
+  has_called boolean not null default false,
+  has_connected boolean not null default false,
+  call_count integer not null default 0,
+  latest_touch_at timestamptz,
   created_at timestamptz not null default now()
 );
 
