@@ -60,6 +60,38 @@ function getDateBounds(params: AllocationQueryParams): { start?: string; end?: s
   return { start: cacheCutoffDate(), end: shanghaiDate() };
 }
 
+export interface AllocationCacheStatus {
+  channel: CacheChannel;
+  latestDataDate: string | null;
+  savedAt: string | null;
+  rowCount: number;
+}
+
+export async function getAllocationCacheStatus(): Promise<AllocationCacheStatus[]> {
+  if (!isAllocationCacheEnabled()) return [];
+  const result = await getCachePool().query<{
+    channel: CacheChannel;
+    latest_data_date: string | null;
+    saved_at: string | null;
+    row_count: number | string;
+  }>(`
+    SELECT DISTINCT ON (channel)
+      channel,
+      dt AS latest_data_date,
+      refreshed_at AS saved_at,
+      row_count
+    FROM allocation_cache_refreshes
+    WHERE status='success'
+    ORDER BY channel, dt DESC, refreshed_at DESC
+  `);
+  return result.rows.map((row) => ({
+    channel: row.channel,
+    latestDataDate: row.latest_data_date,
+    savedAt: row.saved_at,
+    rowCount: Number(row.row_count || 0),
+  }));
+}
+
 export async function queryCachedAllocationRecords(params: AllocationQueryParams): Promise<AllocationQueryResult | null> {
   if (!isAllocationCacheEnabled()) return null;
   const pool = getCachePool();
