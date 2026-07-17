@@ -140,7 +140,7 @@ function toCacheRows(result: AllocationQueryResult): CacheRow[] {
     ...result.bpoRecords.map((r): CacheRow => ({ channel: "bpo", dt: r.dt, user_id: String(r.userid), rank: Number(r.rank), detail: r.userType || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
     ...result.tmkRecords.map((r): CacheRow => ({ channel: "tmk", dt: r.dt, user_id: String(r.user_id), rank: Number(r.queue_rnk), detail: r.lead_channel || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
     ...result.ccRecords.map((r): CacheRow => ({ channel: "cc", dt: r.dt, user_id: String(r.user_id), rank: Number(r.final_rank), detail: r.business_line_type || null, has_actual_assignment: asBoolean(r.has_actual_assignment), sales_ldap: nullableString(r.sales_ldap), assigned_at: nullableString(r.assigned_at), has_called: asBoolean(r.has_called), has_connected: asBoolean(r.has_connected), call_count: Number(r.call_count || 0), latest_touch_at: nullableString(r.latest_touch_at) })),
-  ];
+  ].filter((row) => row.has_actual_assignment);
 }
 
 async function insertRows(client: PoolClient, rows: CacheRow[]): Promise<void> {
@@ -169,7 +169,11 @@ export async function replaceAllocationCacheDate(
   const pool = getCachePool();
   const client = await pool.connect();
   const rows = toCacheRows(result);
-  const counts = { bpo: result.bpoRecords.length, tmk: result.tmkRecords.length, cc: result.ccRecords.length };
+  const counts = {
+    bpo: rows.filter((row) => row.channel === "bpo").length,
+    tmk: rows.filter((row) => row.channel === "tmk").length,
+    cc: rows.filter((row) => row.channel === "cc").length,
+  };
   try {
     await client.query("BEGIN");
     for (const channel of channels) {
