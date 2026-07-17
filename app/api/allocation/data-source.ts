@@ -156,6 +156,7 @@ ${buildDateCondition(params)}
       ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
   FROM assignment_base a
   GROUP BY a.user_id, a.assign_dt
+  HAVING max(a.is_manual_assigned)=1
 )
 SELECT p.*
     ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
@@ -165,7 +166,7 @@ SELECT p.*
     ,coalesce(a.call_count,0) AS call_count
     ,a.latest_touch_at
 FROM pool p
-LEFT JOIN assignment_summary a ON p.userid=a.user_id AND p.dt=a.assign_dt
+JOIN assignment_summary a ON p.userid=a.user_id AND p.dt=a.assign_dt
 ORDER BY p.dt DESC, p.rank
 `.trim();
 }
@@ -198,6 +199,7 @@ ${buildDateCondition(params)}
       ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
   FROM assignment_base a
   GROUP BY a.user_id,a.assign_dt
+  HAVING max(a.is_manual_assigned)=1
 )
 SELECT p.*
     ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
@@ -206,7 +208,7 @@ SELECT p.*
     ,coalesce(a.has_connected,0) AS has_connected
     ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
 FROM pool p
-LEFT JOIN assignment_summary a ON p.user_id=a.user_id AND p.dt=a.assign_dt
+JOIN assignment_summary a ON p.user_id=a.user_id AND p.dt=a.assign_dt
 ORDER BY p.dt DESC,CAST(p.queue_rnk AS BIGINT)
 `.trim();
 }
@@ -267,7 +269,7 @@ SELECT p.*
     ,coalesce(a.has_connected,0) AS has_connected
     ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
 FROM pool p
-LEFT JOIN assignment_summary a ON p.user_id=a.user_id AND date_add(to_date(p.dt),1)=a.assign_dt
+JOIN assignment_summary a ON p.user_id=a.user_id AND date_add(to_date(p.dt),1)=a.assign_dt
 ORDER BY p.dt DESC,CAST(p.final_rank AS BIGINT)
 `.trim();
 }
