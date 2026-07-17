@@ -9,7 +9,7 @@ FROM (
   SELECT
     refresh_day.channel
     ,refresh_day.dt
-    ,COUNT(cache.id)::integer AS row_count
+    ,COUNT(cache.user_id)::integer AS row_count
   FROM public.allocation_cache_refreshes AS refresh_day
   LEFT JOIN public.allocation_record_cache AS cache
     ON cache.channel = refresh_day.channel
