@@ -173,11 +173,12 @@ ORDER BY p.dt DESC, p.rank
 
 export function buildTmkSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
-  const dateCondition = buildDateCondition(params);
+  const tmkAssignDateExpression = "date_add(to_date(dt), 1)";
+  const dateCondition = buildDateCondition(params, tmkAssignDateExpression);
 
   return `
 WITH pool AS (
-  SELECT dt,user_id,lead_channel,queue_rnk
+  SELECT ${tmkAssignDateExpression} AS dt,user_id,lead_channel,queue_rnk
   FROM dw_ads.ads_eng_tmk_hunt_all_user_detail_with_grade_di_no_sensitive_view
   WHERE 1=1
 ${uidCondition}
