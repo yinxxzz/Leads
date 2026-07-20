@@ -67,6 +67,19 @@ export interface AllocationCacheStatus {
   rowCount: number;
 }
 
+export async function markAllocationCacheRefreshFailed(
+  date: string,
+  channel: CacheChannel,
+  error: unknown,
+): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error || "刷新缓存失败");
+  await getCachePool().query(`INSERT INTO allocation_cache_refreshes(channel,dt,status,row_count,refreshed_at,error_message)
+    VALUES($1,$2::date,'failed',0,NOW(),$3)
+    ON CONFLICT(channel,dt) DO UPDATE
+      SET status='failed',refreshed_at=NOW(),error_message=EXCLUDED.error_message`,
+  [channel, date, message.slice(0, 2000)]);
+}
+
 export async function getAllocationCacheStatus(): Promise<AllocationCacheStatus[]> {
   if (!isAllocationCacheEnabled()) return [];
   const result = await getCachePool().query<{

@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
-import { cleanupExpiredAllocationCache, replaceAllocationCacheDate } from "../../cache";
+import { cleanupExpiredAllocationCache, markAllocationCacheRefreshFailed, replaceAllocationCacheDate } from "../../cache";
 import { queryAllocationRecordsForCache } from "../../data-source";
 import type { Channel } from "../../data-source";
 
 type RefreshChannel = Exclude<Channel, "all">;
+
+function channelRecordCount(
+  records: Awaited<ReturnType<typeof queryAllocationRecordsForCache>>,
+  channel: RefreshChannel,
+): number {
+  if (channel === "bpo") return records.bpoRecords.length;
+  if (channel === "tmk") return records.tmkRecords.length;
+  return records.ccRecords.length;
+}
 
 function yesterdayInShanghai(): string {
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000);
@@ -54,22 +63,38 @@ export async function POST(request: Request) {
       : [channel];
 
     const refreshed = [];
+    const failed: Array<{ date: string; channel: RefreshChannel; error: string }> = [];
     for (const date of dates) {
       for (const currentChannel of channels) {
-        const records = await queryAllocationRecordsForCache({
-          channel: currentChannel,
-          dateMode: "specific",
-          date,
-        });
-        refreshed.push({
-          date,
-          channel: currentChannel,
-          ...await replaceAllocationCacheDate(date, records, [currentChannel]),
-        });
+        try {
+          const records = await queryAllocationRecordsForCache({
+            channel: currentChannel,
+            dateMode: "specific",
+            date,
+          });
+          if (channelRecordCount(records, currentChannel) === 0) {
+            throw new Error(`${currentChannel} ${date} 返回0条，已保留原缓存`);
+          }
+          refreshed.push({
+            date,
+            channel: currentChannel,
+            ...await replaceAllocationCacheDate(date, records, [currentChannel]),
+          });
+        } catch (error) {
+          await markAllocationCacheRefreshFailed(date, currentChannel, error);
+          failed.push({
+            date,
+            channel: currentChannel,
+            error: error instanceof Error ? error.message : "刷新缓存失败",
+          });
+        }
       }
     }
     const cleanup = await cleanupExpiredAllocationCache();
-    return NextResponse.json({ success: true, refreshed, cleanup });
+    return NextResponse.json(
+      { success: failed.length === 0, refreshed, failed, cleanup },
+      { status: failed.length === 0 ? 200 : 500 },
+    );
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "刷新缓存失败" },
