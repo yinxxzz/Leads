@@ -80,6 +80,21 @@ function displayCell(key: string, value: unknown): string {
   if (["has_actual_assignment", "has_called", "has_connected"].includes(key)) {
     return value === true || value === 1 || value === "1" || value === "true" ? "是" : "否";
   }
+  if (["assigned_at", "latest_touch_at"].includes(key) && typeof value === "string" && value) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("zh-CN", {
+        timeZone: "Asia/Shanghai",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(date);
+    }
+  }
   return value === null || value === undefined || value === "" ? "-" : String(value);
 }
 
@@ -376,13 +391,13 @@ export default function Home() {
 
   // BPO columns
   const bpoColumns: [string, string][] = [
-    ["dt", "商分入池日期"],
+    ["dt", "实际下发日期"],
     ["userid", "用户 UID"],
     ["userType", "用户类型"],
     ["rank", "排名"],
     ["has_actual_assignment", "实际分配"],
     ["sales_ldap", "分配销售"],
-    ["assigned_at", "实际分配时间"],
+    ["assigned_at", "线索创建时间"],
     ["has_called", "是否拨打"],
     ["has_connected", "是否接通"],
     ["call_count", "拨打次数"],
@@ -391,13 +406,13 @@ export default function Home() {
 
   // TMK columns
   const tmkColumns: [string, string][] = [
-    ["dt", "商分入池日期"],
+    ["dt", "实际下发日期"],
     ["user_id", "用户 UID"],
     ["lead_channel", "线索渠道"],
     ["queue_rnk", "队列排名"],
     ["has_actual_assignment", "实际分配"],
     ["sales_ldap", "分配销售"],
-    ["assigned_at", "实际分配时间"],
+    ["assigned_at", "线索创建时间"],
     ["has_called", "是否拨打"],
     ["has_connected", "是否接通"],
     ["call_count", "拨打次数"],
