@@ -123,51 +123,40 @@ function buildShiftedDateCondition(
 
 export function buildBpoSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
-  const bpoAssignDateExpression = "date_add(to_date(dt), 1)";
-  const dateCondition = buildDateCondition(params, bpoAssignDateExpression);
+  const dateCondition = buildDateCondition(params);
 
   return `
-WITH pool AS (
+WITH actual_base AS (
   SELECT
-      ${bpoAssignDateExpression} AS dt
-      ,user_id AS userid
-      ,CASE WHEN channel='百科存量' THEN 'pediaStock' ELSE channel END AS userType
-      ,row_number() OVER(PARTITION BY ${bpoAssignDateExpression} ORDER BY rand(2026)) AS rank
-  FROM dw_conan_ads.ads_eng_tmk_hunt_side_user_detail_di_no_sensitive_view
-  WHERE call_user_type != '0'
-${uidCondition}
-${dateCondition}
-), assignment_base AS (
-  SELECT
-      user_id,dt AS assign_dt,assign_ldap,lead_db_ctime
+      dt,user_id,user_type,rank_score,lead_id,assign_ldap,lead_db_ctime
       ,is_in_feed,is_dialed,is_connected,call_cnt,first_call_start_time
   FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
   WHERE feed_lead_source='side' AND is_in_feed=1
-${params.uid ? `  AND user_id='${params.uid}'` : ""}
-${buildDateCondition(params)}
-), assignment_summary AS (
+${uidCondition}
+${dateCondition}
+), actual_summary AS (
   SELECT
-      a.user_id, a.assign_dt
-      ,max(a.is_in_feed) AS has_actual_assignment
-      ,concat_ws(',', sort_array(collect_set(a.assign_ldap))) AS sales_ldap
-      ,min(a.lead_db_ctime) AS assigned_at
-      ,max(a.is_dialed) AS has_called
-      ,sum(a.call_cnt) AS call_count
-      ,max(a.is_connected) AS has_connected
-      ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
-  FROM assignment_base a
-  GROUP BY a.user_id, a.assign_dt
+      dt,user_id
+      ,max(user_type) AS userType
+      ,max(rank_score) AS rank_score
+      ,min(lead_id) AS lead_id
+      ,max(is_in_feed) AS has_actual_assignment
+      ,concat_ws(',', sort_array(collect_set(assign_ldap))) AS sales_ldap
+      ,min(lead_db_ctime) AS assigned_at
+      ,max(is_dialed) AS has_called
+      ,sum(call_cnt) AS call_count
+      ,max(is_connected) AS has_connected
+      ,from_unixtime(max(first_call_start_time)) AS latest_touch_at
+  FROM actual_base
+  GROUP BY dt,user_id
 )
-SELECT p.*
-    ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
-    ,a.sales_ldap, a.assigned_at
-    ,coalesce(a.has_called,0) AS has_called
-    ,coalesce(a.has_connected,0) AS has_connected
-    ,coalesce(a.call_count,0) AS call_count
-    ,a.latest_touch_at
-FROM pool p
-JOIN assignment_summary a ON p.userid=a.user_id AND p.dt=a.assign_dt
-ORDER BY p.dt DESC, p.rank
+SELECT
+    dt,user_id AS userid,userType
+    ,row_number() OVER(PARTITION BY dt ORDER BY rank_score DESC,lead_id,user_id) AS rank
+    ,has_actual_assignment,sales_ldap,assigned_at
+    ,has_called,has_connected,call_count,latest_touch_at
+FROM actual_summary
+ORDER BY dt DESC,rank
 `.trim();
 }
 
