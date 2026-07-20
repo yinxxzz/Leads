@@ -139,29 +139,29 @@ ${uidCondition}
 ${dateCondition}
 ), assignment_base AS (
   SELECT
-      user_id,dt AS assign_dt,assign_ldap,first_opp_start_time
-      ,is_manual_assigned,is_dialed,is_connected,call_cnt,first_call_start_time
+      user_id,dt AS assign_dt,assign_ldap,lead_db_ctime
+      ,is_in_feed,is_dialed,is_connected,call_cnt,first_call_start_time
   FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
-  WHERE feed_lead_source='side'
+  WHERE feed_lead_source='side' AND is_in_feed=1
 ${params.uid ? `  AND user_id='${params.uid}'` : ""}
 ${buildDateCondition(params)}
 ), assignment_summary AS (
   SELECT
       a.user_id, a.assign_dt
-      ,max(a.is_manual_assigned) AS has_actual_assignment
+      ,max(a.is_in_feed) AS has_actual_assignment
       ,concat_ws(',', sort_array(collect_set(a.assign_ldap))) AS sales_ldap
-      ,min(a.first_opp_start_time) AS assigned_at
+      ,min(a.lead_db_ctime) AS assigned_at
+      ,max(a.is_dialed) AS has_called
       ,sum(a.call_cnt) AS call_count
       ,max(a.is_connected) AS has_connected
       ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
   FROM assignment_base a
   GROUP BY a.user_id, a.assign_dt
-  HAVING max(a.is_manual_assigned)=1
 )
 SELECT p.*
     ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
     ,a.sales_ldap, a.assigned_at
-    ,CASE WHEN a.call_count > 0 THEN 1 ELSE 0 END AS has_called
+    ,coalesce(a.has_called,0) AS has_called
     ,coalesce(a.has_connected,0) AS has_connected
     ,coalesce(a.call_count,0) AS call_count
     ,a.latest_touch_at
@@ -183,28 +183,28 @@ WITH pool AS (
 ${uidCondition}
 ${dateCondition}
 ), assignment_base AS (
-  SELECT user_id,dt AS assign_dt,assign_ldap,first_opp_start_time
-      ,is_manual_assigned,is_dialed,is_connected,call_cnt,first_call_start_time
+  SELECT user_id,dt AS assign_dt,assign_ldap,lead_db_ctime
+      ,is_in_feed,is_dialed,is_connected,call_cnt,first_call_start_time
   FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
-  WHERE feed_lead_source='internal'
+  WHERE feed_lead_source='internal' AND is_in_feed=1
 ${params.uid ? `  AND user_id='${params.uid}'` : ""}
 ${buildDateCondition(params)}
 ), assignment_summary AS (
   SELECT a.user_id,a.assign_dt
-      ,max(a.is_manual_assigned) AS has_actual_assignment
+      ,max(a.is_in_feed) AS has_actual_assignment
       ,concat_ws(',',sort_array(collect_set(a.assign_ldap))) AS sales_ldap
-      ,min(a.first_opp_start_time) AS assigned_at
+      ,min(a.lead_db_ctime) AS assigned_at
+      ,max(a.is_dialed) AS has_called
       ,sum(a.call_cnt) AS call_count
       ,max(a.is_connected) AS has_connected
       ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
   FROM assignment_base a
   GROUP BY a.user_id,a.assign_dt
-  HAVING max(a.is_manual_assigned)=1
 )
 SELECT p.*
     ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
     ,a.sales_ldap,a.assigned_at
-    ,CASE WHEN a.call_count > 0 THEN 1 ELSE 0 END AS has_called
+    ,coalesce(a.has_called,0) AS has_called
     ,coalesce(a.has_connected,0) AS has_connected
     ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
 FROM pool p
