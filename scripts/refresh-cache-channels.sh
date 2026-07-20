@@ -19,6 +19,7 @@ payload_for() {
   fi
 }
 
+failed_channels=()
 for channel in bpo tmk cc; do
   echo "[$(date '+%F %T')] 开始刷新 $channel"
   if ! curl --fail --silent --show-error \
@@ -29,9 +30,14 @@ for channel in bpo tmk cc; do
     -H "Content-Type: application/json" \
     -d "$(payload_for "$channel")"; then
     echo "[$(date '+%F %T')] $channel 刷新失败" >&2
-    exit 1
+    failed_channels+=("$channel")
   fi
   echo
 done
+
+if (( ${#failed_channels[@]} > 0 )); then
+  echo "[$(date '+%F %T')] 刷新失败渠道：${failed_channels[*]}" >&2
+  exit 1
+fi
 
 echo "[$(date '+%F %T')] 三个渠道刷新完成"
