@@ -16,7 +16,7 @@ mkdir -p "$STATE_DIR"
 
 run_refresh() {
   local label="$1"
-  echo "[$(date '+%F %T')] $label：刷新今天及前两天"
+  echo "[$(date '+%F %T')] $label：刷新昨天及此前两天"
   ALLOCATION_CACHE_ROLLING_DAYS="${ALLOCATION_CACHE_ROLLING_DAYS:-3}" \
     bash "$PROJECT_ROOT/scripts/refresh-recent-cache.sh"
 }
