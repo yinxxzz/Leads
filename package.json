@@ -13,6 +13,7 @@
     "cache:import": "tsx --env-file=.env.local scripts/import-cache-csv.ts",
     "cache:refresh": "bash scripts/refresh-cache-channels.sh",
     "cache:refresh:rolling": "bash scripts/refresh-recent-cache.sh",
+    "cache:scheduler": "bash scripts/cache-refresh-scheduler.sh",
     "cache:backfill": "bash scripts/backfill-cache.sh",
     "publish": "node scripts/publish.js"
   },

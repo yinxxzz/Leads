@@ -660,7 +660,8 @@ async function executeSql<T>(sql: string, context: QueryContext): Promise<T[]> {
   const provider = getQueryProvider();
 
   if (provider === "bigdata-mcp") {
-    return executeBigDataMcp<T>(sql, context);
+    // 历史查询可能超过一次 HTTP 请求的等待时间，改用提交任务、轮询、下载结果的稳定链路。
+    return executeBigDataMcpCsv<T>(sql, context);
   }
 
   if (provider === "sql-api") {
