@@ -80,6 +80,39 @@ export async function markAllocationCacheRefreshFailed(
   [channel, date, message.slice(0, 2000)]);
 }
 
+export async function getAllocationCacheDateCount(
+  date: string,
+  channel: CacheChannel,
+): Promise<number> {
+  const result = await getCachePool().query<{ row_count: number | string }>(
+    "SELECT COUNT(*) AS row_count FROM allocation_record_cache WHERE channel=$1 AND dt=$2::date",
+    [channel, date],
+  );
+  return Number(result.rows[0]?.row_count || 0);
+}
+
+export async function withAllocationCacheRefreshLock<T>(
+  date: string,
+  channel: CacheChannel,
+  task: () => Promise<T>,
+): Promise<T> {
+  const client = await getCachePool().connect();
+  const lockKey = `allocation-cache:${channel}:${date}`;
+  try {
+    const lock = await client.query<{ acquired: boolean }>(
+      "SELECT pg_try_advisory_lock(hashtext($1)) AS acquired",
+      [lockKey],
+    );
+    if (!lock.rows[0]?.acquired) {
+      throw new Error(`${channel} ${date} 已有刷新任务正在运行`);
+    }
+    return await task();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]).catch(() => undefined);
+    client.release();
+  }
+}
+
 export async function getAllocationCacheStatus(): Promise<AllocationCacheStatus[]> {
   if (!isAllocationCacheEnabled()) return [];
   const result = await getCachePool().query<{
