@@ -109,9 +109,14 @@ export async function POST(request: Request) {
       rangeLabel: includeHistory ? "数仓全部历史" : "最近90天缓存",
     });
   } catch (error) {
+    console.error("[allocation/query] 查询失败", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "请求参数解析失败" },
-      { status: 400 }
+      {
+        error: error instanceof Error && error.message.includes("超时")
+          ? "历史查询时间较长，本次已超时，请稍后重试或选择单个渠道"
+          : "历史查询暂时失败，请稍后重试；最近90天仍可使用普通查询",
+      },
+      { status: 500 }
     );
   }
 }
