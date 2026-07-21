@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { cleanupExpiredAllocationCache, markAllocationCacheRefreshFailed, replaceAllocationCacheDate } from "../../cache";
+import {
+  cleanupExpiredAllocationCache,
+  getAllocationCacheDateCount,
+  markAllocationCacheRefreshFailed,
+  replaceAllocationCacheDate,
+  withAllocationCacheRefreshLock,
+} from "../../cache";
 import { queryAllocationRecordsForCache } from "../../data-source";
 import type { Channel } from "../../data-source";
 
@@ -62,23 +68,32 @@ export async function POST(request: Request) {
       ? ["bpo", "tmk", "cc"]
       : [channel];
 
-    const refreshed = [];
+    const refreshed: Array<{
+      date: string;
+      channel: RefreshChannel;
+      total: number;
+      counts: Record<string, number>;
+    }> = [];
     const failed: Array<{ date: string; channel: RefreshChannel; error: string }> = [];
     for (const date of dates) {
       for (const currentChannel of channels) {
         try {
-          const records = await queryAllocationRecordsForCache({
-            channel: currentChannel,
-            dateMode: "specific",
-            date,
-          });
-          if (channelRecordCount(records, currentChannel) === 0) {
-            throw new Error(`${currentChannel} ${date} 返回0条，已保留原缓存`);
-          }
-          refreshed.push({
-            date,
-            channel: currentChannel,
-            ...await replaceAllocationCacheDate(date, records, [currentChannel]),
+          await withAllocationCacheRefreshLock(date, currentChannel, async () => {
+            const records = await queryAllocationRecordsForCache({
+              channel: currentChannel,
+              dateMode: "specific",
+              date,
+            });
+            const incomingCount = channelRecordCount(records, currentChannel);
+            const existingCount = await getAllocationCacheDateCount(date, currentChannel);
+            if (incomingCount === 0 && existingCount > 0) {
+              throw new Error(`${currentChannel} ${date} 返回0条，已保留原有${existingCount}条缓存`);
+            }
+            refreshed.push({
+              date,
+              channel: currentChannel,
+              ...await replaceAllocationCacheDate(date, records, [currentChannel]),
+            });
           });
         } catch (error) {
           await markAllocationCacheRefreshFailed(date, currentChannel, error);
