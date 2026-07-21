@@ -447,20 +447,18 @@ export default function Home() {
         </p>
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-4 mb-5">
-        <div className="text-[13px] font-semibold text-gray-700 mb-3">云端缓存保存时间</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <section className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-2.5 mb-5 text-xs text-gray-600">
+        <span className="font-semibold text-gray-700">缓存进度</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
           {(["bpo", "tmk", "cc"] as const).map((cacheChannel) => {
             const status = cacheStatus.find((item) => item.channel === cacheChannel);
             return (
-              <div key={cacheChannel} className="rounded-xl bg-gray-50 px-4 py-3">
-                <div className="text-xs font-bold text-gray-500 uppercase mb-1">{cacheChannel}</div>
-                <div className="text-sm font-semibold text-gray-900">{formatCacheSavedAt(status?.savedAt || null)}</div>
-                <div className="mt-1 text-xs text-gray-500">
-                  最新数据日期：{status?.latestDataDate || "暂无"}
-                  {status ? ` · ${status.rowCount.toLocaleString()} 条` : ""}
-                </div>
-              </div>
+              <span key={cacheChannel} className="whitespace-nowrap">
+                <strong className="mr-1 text-gray-800 uppercase">{cacheChannel}</strong>
+                {status
+                  ? `${status.latestDataDate} · ${status.rowCount.toLocaleString()}条 · 保存于 ${formatCacheSavedAt(status.savedAt)}`
+                  : "暂无数据"}
+              </span>
             );
           })}
         </div>

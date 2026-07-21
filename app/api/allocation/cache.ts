@@ -127,7 +127,7 @@ export async function getAllocationCacheStatus(): Promise<AllocationCacheStatus[
       refreshed_at AS saved_at,
       row_count
     FROM allocation_cache_refreshes
-    WHERE status='success'
+    WHERE status='success' AND row_count > 0
     ORDER BY channel, dt DESC, refreshed_at DESC
   `);
   return result.rows.map((row) => ({
