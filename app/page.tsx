@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Search, Download, RotateCcw } from "lucide-react";
+import InteractiveCats from "./components/InteractiveCats";
 
 // Types
 interface BpoRecord {
@@ -827,6 +828,8 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <InteractiveCats />
     </main>
   );
 }
