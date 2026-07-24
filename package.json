@@ -6,7 +6,7 @@
     "dev": "NODE_ENV=development next dev -p 8000",
     "build": "next build",
     "start": "next start -p 8000",
-    "lint": "next lint",
+    "lint": "eslint . --ext .ts,.tsx",
     "db:init": "tsx --env-file=.env.local scripts/init-db.ts",
     "db:migrate:assignment-contact": "tsx --env-file=.env.local scripts/run-assignment-contact-migration.ts",
     "db:migrate:actual-only": "tsx --env-file=.env.local scripts/run-actual-only-migration.ts",

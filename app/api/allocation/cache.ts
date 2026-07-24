@@ -30,7 +30,6 @@ let cachePool: Pool | null = null;
 function getCachePool(): Pool {
   if (cachePool) return cachePool;
   if (!process.env.USER_POSTGRESQL_URL) throw new Error("缺少USER_POSTGRESQL_URL，无法使用分配缓存");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const pg = require("pg") as typeof import("pg");
   pg.types.setTypeParser(1082, (value: string) => value);
   cachePool = new pg.Pool({
@@ -127,7 +126,7 @@ export async function getAllocationCacheStatus(): Promise<AllocationCacheStatus[
       refreshed_at AS saved_at,
       row_count
     FROM allocation_cache_refreshes
-    WHERE status='success' AND row_count > 0
+    WHERE status='success'
     ORDER BY channel, dt DESC, refreshed_at DESC
   `);
   return result.rows.map((row) => ({

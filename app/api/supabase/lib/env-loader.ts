@@ -27,9 +27,7 @@ export function ensureEnvLoaded(): void {
   envLoaded = true;
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const dotenv = require('dotenv');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require('path');
 
     // 先加载 .env.local（优先级更高），再加载 .env 作为兜底

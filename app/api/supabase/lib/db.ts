@@ -113,7 +113,6 @@ export function getPgPool(): Pool | null {
   if (connType !== 'pg') return null;
 
   // 动态导入 pg，避免在客户端打包
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Pool: PgPool } = require('pg');
   pgPool = new PgPool({
     connectionString: process.env.USER_POSTGRESQL_URL,
@@ -148,7 +147,6 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (connType !== 'sdk') return null;
 
   // 动态导入 Supabase SDK 连接池
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createSupabaseClient } = require('./supabase-sdk-pool');
   supabaseClient = createSupabaseClient();
 

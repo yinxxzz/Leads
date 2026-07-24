@@ -101,34 +101,18 @@ function buildDateCondition(params: AllocationQueryParams, dateExpression = "dt"
   return `  and ${dateExpression} >= '${params.startDate}' and ${dateExpression} <= '${params.endDate}'`;
 }
 
-function shiftIsoDate(date: string, days: number): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + days);
-  return value.toISOString().slice(0, 10);
-}
-
-function buildShiftedDateCondition(
-  params: AllocationQueryParams,
-  dateExpression: string,
-  days: number,
-): string {
-  if (params.dateMode === "specific" && params.date) {
-    return `  and ${dateExpression} = '${shiftIsoDate(params.date, days)}'`;
-  }
-  if (params.dateMode === "range" && params.startDate && params.endDate) {
-    return `  and ${dateExpression} >= '${shiftIsoDate(params.startDate, days)}' and ${dateExpression} <= '${shiftIsoDate(params.endDate, days)}'`;
-  }
-  return "";
-}
-
 export function buildBpoSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
-  const dateCondition = buildDateCondition(params);
+  // 原始 dt 是当天的商分池日期；工作台展示下一天的实际分配日期。
+  const bpoAssignDateExpression = "date_add(to_date(dt), 1)";
+  const dateCondition = buildDateCondition(params, bpoAssignDateExpression);
 
   return `
 WITH actual_base AS (
   SELECT
-      dt,user_id,user_type,rank_score,lead_id,assign_ldap,lead_db_ctime
+      ${bpoAssignDateExpression} AS dt,user_id
+      ,concat_ws(' | ', user_type, concat('商分池时间=', dt)) AS user_type
+      ,rank_score,lead_id,assign_ldap,lead_db_ctime
       ,is_in_feed,is_dialed,is_connected,call_cnt,first_call_start_time
   FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
   WHERE feed_lead_source='side' AND is_in_feed=1
@@ -164,61 +148,62 @@ export function buildTmkSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
   const tmkAssignDateExpression = "date_add(to_date(dt), 1)";
   const dateCondition = buildDateCondition(params, tmkAssignDateExpression);
+  const actualDateCondition = buildDateCondition(params, tmkAssignDateExpression);
 
   return `
-WITH pool AS (
-  SELECT ${tmkAssignDateExpression} AS dt,user_id,lead_channel,queue_rnk
+WITH actual_counts AS (
+  SELECT ${tmkAssignDateExpression} AS dt,COUNT(DISTINCT user_id) AS actual_count
+  FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
+  WHERE feed_lead_source='internal' AND is_in_feed=1
+${actualDateCondition}
+  GROUP BY ${tmkAssignDateExpression}
+), pool_raw AS (
+  SELECT ${tmkAssignDateExpression} AS dt,user_id
+      ,concat_ws(' | ', lead_channel, concat('商分池时间=', dt)) AS lead_channel
+      ,CAST(queue_rnk AS BIGINT) AS original_queue_rnk
   FROM dw_ads.ads_eng_tmk_hunt_all_user_detail_with_grade_di_no_sensitive_view
   WHERE 1=1
 ${uidCondition}
 ${dateCondition}
-), assignment_base AS (
-  SELECT user_id,dt AS assign_dt,assign_ldap,lead_db_ctime
-      ,is_in_feed,is_dialed,is_connected,call_cnt,first_call_start_time
-  FROM dw_conan_ads.ads_conan_tmk_hunt_lead_day_di
-  WHERE feed_lead_source='internal' AND is_in_feed=1
-${params.uid ? `  AND user_id='${params.uid}'` : ""}
-${buildDateCondition(params)}
-), assignment_summary AS (
-  SELECT a.user_id,a.assign_dt
-      ,max(a.is_in_feed) AS has_actual_assignment
-      ,concat_ws(',',sort_array(collect_set(a.assign_ldap))) AS sales_ldap
-      ,min(a.lead_db_ctime) AS assigned_at
-      ,max(a.is_dialed) AS has_called
-      ,sum(a.call_cnt) AS call_count
-      ,max(a.is_connected) AS has_connected
-      ,from_unixtime(max(a.first_call_start_time)) AS latest_touch_at
-  FROM assignment_base a
-  GROUP BY a.user_id,a.assign_dt
+), pool AS (
+  SELECT dt,user_id,lead_channel
+      ,row_number() OVER(PARTITION BY dt ORDER BY original_queue_rnk,lead_channel,user_id) AS queue_rnk
+  FROM pool_raw
 )
-SELECT p.*
-    ,coalesce(a.has_actual_assignment,0) AS has_actual_assignment
-    ,a.sales_ldap,a.assigned_at
-    ,coalesce(a.has_called,0) AS has_called
-    ,coalesce(a.has_connected,0) AS has_connected
-    ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
+SELECT
+    p.dt,p.user_id,p.lead_channel,p.queue_rnk
+    ,true AS has_actual_assignment
+    ,'' AS sales_ldap
+    ,concat(CAST(p.dt AS string),' 00:00:00+08') AS assigned_at
+    ,false AS has_called
+    ,false AS has_connected
+    ,0 AS call_count
+    ,NULL AS latest_touch_at
 FROM pool p
-JOIN assignment_summary a ON p.user_id=a.user_id AND p.dt=a.assign_dt
-ORDER BY p.dt DESC,CAST(p.queue_rnk AS BIGINT)
+JOIN actual_counts a ON p.dt=a.dt AND p.queue_rnk <= a.actual_count
+ORDER BY p.dt DESC,p.queue_rnk
 `.trim();
 }
 
 export function buildCcSql(params: AllocationQueryParams): string {
   const uidCondition = params.uid ? `  and user_id = '${params.uid}'` : "";
   const assignmentUidCondition = params.uid ? `  and u.userid = '${params.uid}'` : "";
-  const dateCondition = buildDateCondition(params);
-  const assignmentDateCondition = buildShiftedDateCondition(params, "to_date(from_unixtime(CAST(o.starttime AS BIGINT) / 1000))", 1);
+  // CC 展示日期为实际商机分配日；商分池日期需要回退一天。
+  const ccAssignDateExpression = "date_add(to_date(dt), 1)";
+  const dateCondition = buildDateCondition(params, ccAssignDateExpression);
+  const assignmentDateCondition = buildDateCondition(params, "to_date(from_unixtime(CAST(o.starttime AS BIGINT) / 1000))");
   const callDateCondition = params.dateMode === "specific" && params.date
-    ? `  and to_date(touch_dt) >= '${shiftIsoDate(params.date, 1)}'`
+    ? `  and to_date(touch_dt) >= '${params.date}'`
     : params.dateMode === "range" && params.startDate
-      ? `  and to_date(touch_dt) >= '${shiftIsoDate(params.startDate, 1)}'`
+      ? `  and to_date(touch_dt) >= '${params.startDate}'`
       : "";
 
   return `
 WITH pool AS (
-  SELECT dt,user_id,final_rank,business_line_type
+  SELECT ${ccAssignDateExpression} AS dt,user_id,final_rank
+      ,concat_ws(' | ', business_line_type, concat('商分池时间=', dt)) AS business_line_type
   FROM dw_ads.ads_conan_user_cc_total_all_age_with_grade_di
-  WHERE CAST(final_rank AS BIGINT) <= 7000
+  WHERE 1=1
 ${uidCondition}
 ${dateCondition}
 ), assignment_base AS (
@@ -259,7 +244,7 @@ SELECT p.*
     ,coalesce(a.has_connected,0) AS has_connected
     ,coalesce(a.call_count,0) AS call_count,a.latest_touch_at
 FROM pool p
-JOIN assignment_summary a ON p.user_id=a.user_id AND date_add(to_date(p.dt),1)=a.assign_dt
+JOIN assignment_summary a ON p.user_id=a.user_id AND p.dt=a.assign_dt
 ORDER BY p.dt DESC,CAST(p.final_rank AS BIGINT)
 `.trim();
 }

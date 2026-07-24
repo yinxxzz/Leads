@@ -392,13 +392,13 @@ export default function Home() {
 
   // BPO columns
   const bpoColumns: [string, string][] = [
-    ["dt", "实际下发日期"],
+    ["dt", "分配日期"],
     ["userid", "用户 UID"],
-    ["userType", "用户类型"],
+    ["userType", "用户类型 / 商分池时间"],
     ["rank", "排名"],
     ["has_actual_assignment", "实际分配"],
     ["sales_ldap", "分配销售"],
-    ["assigned_at", "线索创建时间"],
+    ["assigned_at", "分配时间"],
     ["has_called", "是否拨打"],
     ["has_connected", "是否接通"],
     ["call_count", "拨打次数"],
@@ -407,13 +407,13 @@ export default function Home() {
 
   // TMK columns
   const tmkColumns: [string, string][] = [
-    ["dt", "实际下发日期"],
+    ["dt", "分配日期"],
     ["user_id", "用户 UID"],
-    ["lead_channel", "线索渠道"],
+    ["lead_channel", "线索渠道 / 商分池时间"],
     ["queue_rnk", "队列排名"],
     ["has_actual_assignment", "实际分配"],
     ["sales_ldap", "分配销售"],
-    ["assigned_at", "线索创建时间"],
+    ["assigned_at", "分配时间"],
     ["has_called", "是否拨打"],
     ["has_connected", "是否接通"],
     ["call_count", "拨打次数"],
@@ -422,10 +422,10 @@ export default function Home() {
 
   // CC columns
   const ccColumns: [string, string][] = [
-    ["dt", "商分入池日期"],
+    ["dt", "分配日期"],
     ["user_id", "用户 UID"],
     ["final_rank", "最终排名"],
-    ["business_line_type", "业务线类型"],
+    ["business_line_type", "业务线类型 / 商分池时间"],
     ["has_actual_assignment", "实际分配"],
     ["sales_ldap", "分配销售"],
     ["assigned_at", "实际分配时间"],
@@ -682,7 +682,7 @@ export default function Home() {
             </div>
           </div>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_24px_rgba(15,23,42,0.04)] p-[18px]">
-            <div className="text-[13px] text-gray-500 mb-2">最近商分入池日期</div>
+            <div className="text-[13px] text-gray-500 mb-2">最近分配日期</div>
             <div className="text-[22px] font-bold">{result.latestDt}</div>
           </div>
         </section>

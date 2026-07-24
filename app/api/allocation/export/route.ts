@@ -36,7 +36,7 @@ function buildCsv(rows: CsvRow[]): string {
     "分配日期",
     "用户UID",
     "排名",
-    "用户类型/线索渠道/业务线类型",
+    "用户类型/线索渠道/业务线类型（可含商分池时间）",
   ];
 
   const lines = [
